@@ -88,6 +88,10 @@ data class UiState(
     val language: String = "en-US",
     /** True: live voice through Gemini Live. False: ChatGPT plan with on-phone speech. */
     val liveMode: Boolean = false,
+    /** ClawSpecs: questions go to your own agent through the bridge. Wins over [liveMode]. */
+    val clawMode: Boolean = true,
+    val clawUrl: String = "",
+    val clawTokenSet: Boolean = false,
     val geminiKeySet: Boolean = false,
     val bargeIn: Boolean = true,
     /** A gesture on the glasses starts and stops the conversation. Not kept across restarts. */
@@ -113,6 +117,10 @@ object Engine {
   private const val PHOTO_TIMEOUT_MS = 3000L
   private const val STREAM_WAIT_MS = 10_000L
   private const val GEMINI_KEY = "gemini_api_key"
+  private const val CLAW_TOKEN = "claw_bridge_token"
+  private const val DEFAULT_WAKE = "hey claw, oye claw"
+  // If the agent has not answered by then, say a short filler so silence is not mistaken for a hang.
+  private const val CLAW_FILLER_MS = 4000L
   // Lighter than the per-question frame: one of these goes up every second.
   private const val LIVE_JPEG_QUALITY = 65
 
@@ -165,10 +173,13 @@ object Engine {
           model = prefs.getString("model", DEFAULT_MODEL) ?: DEFAULT_MODEL,
           glassesMic = prefs.getBoolean("glasses_mic", true),
           photoMode = prefs.getBoolean("photo_mode", false),
-          wakeWord = prefs.getString("wake_word", "") ?: "",
+          wakeWord = prefs.getString("wake_word", DEFAULT_WAKE) ?: DEFAULT_WAKE,
           language = prefs.getString("language", null) ?: Locale.getDefault().toLanguageTag(),
           geminiKeySet = SecureStore.get(app, GEMINI_KEY) != null,
           liveMode = prefs.getBoolean("live_mode", false),
+          clawMode = prefs.getBoolean("claw_mode", true),
+          clawUrl = prefs.getString("claw_url", "") ?: "",
+          clawTokenSet = SecureStore.get(app, CLAW_TOKEN) != null,
           bargeIn = prefs.getBoolean("barge_in", true),
           triggerPackage =
               prefs.getString("trigger_package", null) ?: MediaWatch.DEFAULT_TRIGGER,
@@ -365,6 +376,46 @@ object Engine {
     prefs().edit().putBoolean("live_mode", value).apply()
   }
 
+  fun setClawMode(value: Boolean) {
+    update { it.copy(clawMode = value) }
+    prefs().edit().putBoolean("claw_mode", value).apply()
+  }
+
+  fun setClawUrl(value: String) {
+    val url = Claw.normalizeUrl(value)
+    update { it.copy(clawUrl = url) }
+    prefs().edit().putString("claw_url", url).apply()
+  }
+
+  /** The token stays on this phone, encrypted; it is only ever sent to your bridge. */
+  fun setClawToken(value: String) {
+    val token = value.trim()
+    if (token.isEmpty()) return
+    SecureStore.put(app, CLAW_TOKEN, token)
+    update { it.copy(clawTokenSet = true) }
+    log("Bridge token saved")
+  }
+
+  fun clearClawToken() {
+    if (_state.value.running && _state.value.clawMode) stop()
+    SecureStore.put(app, CLAW_TOKEN, null)
+    update { it.copy(clawTokenSet = false) }
+    log("Bridge token deleted")
+  }
+
+  fun testClaw() {
+    val url = _state.value.clawUrl
+    val token = SecureStore.get(app, CLAW_TOKEN)
+    if (url.isEmpty() || token == null) {
+      fail("Set the bridge address and token first")
+      return
+    }
+    scope.launch {
+      val problem = Claw.check(url, token)
+      if (problem == null) log("Bridge reachable at $url") else fail("Bridge: $problem")
+    }
+  }
+
   fun setBargeIn(value: Boolean) {
     update { it.copy(bargeIn = value) }
     prefs().edit().putBoolean("barge_in", value).apply()
@@ -463,11 +514,16 @@ object Engine {
    */
   fun start(requestPermission: (suspend (Permission) -> PermissionStatus)?) {
     if (_state.value.running) return
-    if (_state.value.liveMode && !_state.value.geminiKeySet) {
+    val claw = _state.value.clawMode
+    if (claw && (_state.value.clawUrl.isEmpty() || !_state.value.clawTokenSet)) {
+      fail("Set the bridge address and token first")
+      return
+    }
+    if (!claw && _state.value.liveMode && !_state.value.geminiKeySet) {
       fail("Save a Gemini API key first")
       return
     }
-    if (!_state.value.liveMode && !_state.value.signedIn) {
+    if (!claw && !_state.value.liveMode && !_state.value.signedIn) {
       fail("Sign in to ChatGPT first")
       return
     }
@@ -475,6 +531,7 @@ object Engine {
       fail("Grant the Bluetooth and microphone permissions first")
       return
     }
+    if (claw) Claw.newConversation()
     update { it.copy(running = true, phase = Phase.CONNECTING, error = null) }
     scope.launch {
       var granted = false
@@ -670,7 +727,7 @@ object Engine {
   private fun startVoice() {
     if (voiceActive) return
     voiceActive = true
-    if (_state.value.liveMode) {
+    if (_state.value.liveMode && !_state.value.clawMode) {
       startLive()
       return
     }
@@ -778,16 +835,20 @@ object Engine {
       return
     }
     var question = heard
-    val wakeWord = _state.value.wakeWord.trim()
-    if (wakeWord.isNotEmpty()) {
-      // With a wake word set, everything that does not contain it is ignored.
-      val index = heard.lowercase().indexOf(wakeWord.lowercase())
-      if (index < 0) {
+    val phrases = wakePhrases(_state.value.wakeWord)
+    if (phrases.isNotEmpty()) {
+      // With wake phrases set, everything that does not contain one of them is ignored.
+      val normalized = normalizeWake(heard)
+      val match =
+          phrases
+              .mapNotNull { p -> Regex("\\b" + Regex.escape(p) + "\\b").find(normalized) }
+              .minByOrNull { it.range.first }
+      if (match == null) {
         listen()
         return
       }
-      val after = (index + wakeWord.length).coerceAtMost(heard.length)
-      question = heard.substring(after).trim().trimStart(',', '.', '!', '?', ' ')
+      question =
+          normalized.substring(match.range.last + 1).trim().trimStart(',', '.', '!', '?', ' ')
       if (question.isEmpty()) {
         listen()
         return
@@ -797,6 +858,10 @@ object Engine {
   }
 
   private suspend fun runTurn(question: String) {
+    if (_state.value.clawMode) {
+      runClawTurn(question)
+      return
+    }
     val startedAt = SystemClock.elapsedRealtime()
     update {
       it.copy(
@@ -894,10 +959,103 @@ object Engine {
     listen()
   }
 
+  /** Comma-separated wake phrases from settings, lower case, sound-alikes folded. */
+  private fun wakePhrases(raw: String): List<String> =
+      raw.split(',').map { normalizeWake(it).trim() }.filter { it.isNotEmpty() }
+
+  /**
+   * Speech recognition in Spanish rarely writes "Claw": it hears "clo", "clau", "claus"... and
+   * "hey" comes back as "ey" or "hei". Folding those before matching makes "hey Claw" and
+   * "oye Claw" work without an offline hotword model. Only the wake word itself is folded.
+   */
+  private fun normalizeWake(text: String): String =
+      text.lowercase()
+          .replace(Regex("[,¡!¿?.]"), " ")
+          .replace(Regex("\\s+"), " ")
+          .replace(Regex("\\b(cl[oó]|cl[aá]u[sx]?|cl[aá]o|kl[aá]u[sx]?|klaw|cl[aá]w|clow)\\b"), "claw")
+          .replace(Regex("\\b(ey|ei|hei|hej|eh|hay) claw\\b"), "hey claw")
+          .replace(Regex("\\b(oie|olle|oiga|oi) claw\\b"), "oye claw")
+          .trim()
+
+  /** ClawSpecs: one question to the bridge, the whole answer spoken when it arrives. */
+  private suspend fun runClawTurn(question: String) {
+    val startedAt = SystemClock.elapsedRealtime()
+    update {
+      it.copy(
+          phase = Phase.THINKING,
+          question = question,
+          answer = "",
+          partial = "",
+          latencyMs = null,
+          error = null,
+      )
+    }
+    val jpeg = if (wantsPicture(question)) withContext(Dispatchers.Default) { acquireFrame() } else null
+    if (jpeg != null) {
+      val preview = withContext(Dispatchers.Default) { Frames.preview(jpeg) }
+      update { it.copy(frame = preview, frameInfo = Frames.info) }
+    }
+    val settings = _state.value
+    val token = SecureStore.get(app, CLAW_TOKEN)
+    if (token == null) {
+      fail("No bridge token")
+      shutdown()
+      return
+    }
+    val filler =
+        scope.launch {
+          delay(CLAW_FILLER_MS)
+          tts?.speak(fillerPhrase())
+        }
+    try {
+      val answer = Claw.ask(settings.clawUrl, token, question, speechLanguage(), jpeg)
+      filler.cancel()
+      awaitSpeechEnd()
+      val latency = SystemClock.elapsedRealtime() - startedAt
+      update { it.copy(phase = Phase.SPEAKING, answer = answer, latencyMs = latency) }
+      val chunker = SentenceChunker()
+      chunker.push(answer).forEach { s -> cleanForSpeech(s).takeIf { it.isNotEmpty() }?.let { tts?.speak(it) } }
+      chunker.flush()?.let { s -> cleanForSpeech(s).takeIf { it.isNotEmpty() }?.let { tts?.speak(it) } }
+      awaitSpeechEnd()
+    } catch (e: CancellationException) {
+      filler.cancel()
+      throw e
+    } catch (e: Exception) {
+      filler.cancel()
+      val unauthorized = e is ClawException && e.status == 401
+      fail(if (unauthorized) "Bridge rejected the token" else "Bridge request failed: ${e.message}")
+      tts?.speak(spokenError(false))
+      awaitSpeechEnd()
+    }
+    listen()
+  }
+
+  /**
+   * Frames cost upload time, so in Claw mode one is only sent when the question is about what
+   * is in front of the user, or always when photo mode is on.
+   */
+  private fun wantsPicture(question: String): Boolean {
+    if (_state.value.photoMode) return true
+    return VISUAL_CUES.containsMatchIn(question)
+  }
+
+  private val VISUAL_CUES =
+      Regex(
+          "\\b(mira|miro|mirando|ves|veo|esto|aquí|aqui|delante|lee|leer|léeme|leeme|traduce|" +
+              "cartel|foto|look|see|this|read|translate|in front)\\b",
+          RegexOption.IGNORE_CASE,
+      )
+
+  private fun fillerPhrase(): String =
+      if (speechLanguage().startsWith("es", ignoreCase = true)) "Un momento." else "One moment."
+
   /** Spoken in the recognition language; the text-to-speech voice cannot read another one. */
   private fun spokenError(limit: Boolean): String {
     val russian = speechLanguage().startsWith("ru", ignoreCase = true)
+    val spanish = speechLanguage().startsWith("es", ignoreCase = true)
     return when {
+      limit && spanish -> "Límite alcanzado."
+      spanish -> "Ha fallado la consulta."
       limit && russian -> "Лимит подписки исчерпан."
       limit -> "Plan limit reached."
       russian -> "Ошибка запроса."

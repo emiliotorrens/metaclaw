@@ -16,7 +16,7 @@ android {
   compileSdk = 36
 
   defaultConfig {
-    applicationId = "com.keonyrus.tupovision"
+    applicationId = "io.github.emiliotorrens.clawspecs"
     minSdk = 31
     targetSdk = 36
     versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()

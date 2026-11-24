@@ -143,7 +143,7 @@ class MainActivity : ComponentActivity() {
 
   private fun copyLog() {
     val clipboard = getSystemService(ClipboardManager::class.java)
-    clipboard.setPrimaryClip(ClipData.newPlainText("Tupo Vision log", Engine.logText()))
+    clipboard.setPrimaryClip(ClipData.newPlainText("ClawSpecs log", Engine.logText()))
   }
 }
 
@@ -167,7 +167,7 @@ private fun Screen(
               .padding(16.dp),
       verticalArrangement = Arrangement.spacedBy(12.dp),
   ) {
-    Text("Tupo Vision", style = MaterialTheme.typography.headlineSmall)
+    Text("ClawSpecs", style = MaterialTheme.typography.headlineSmall)
 
     val error = state.error
     if (error != null) {
@@ -181,8 +181,11 @@ private fun Screen(
 
     ConversationSection(state, onStart)
     GlassesSection(state, onGrantPermissions, onInstallMetaAi, onRegister, onUnregister)
-    AssistantSection(state)
-    if (!state.liveMode) ChatGptSection(state, onSignIn)
+    ClawSection(state)
+    if (!state.clawMode) {
+      AssistantSection(state)
+      if (!state.liveMode) ChatGptSection(state, onSignIn)
+    }
     SettingsSection(state, onNotificationAccess)
     LogSection(state, onCopyLog)
   }
@@ -190,7 +193,12 @@ private fun Screen(
 
 @Composable
 private fun ConversationSection(state: UiState, onStart: () -> Unit) {
-  val assistantReady = if (state.liveMode) state.geminiKeySet else state.signedIn
+  val assistantReady =
+      when {
+        state.clawMode -> state.clawUrl.isNotEmpty() && state.clawTokenSet
+        state.liveMode -> state.geminiKeySet
+        else -> state.signedIn
+      }
   val ready = assistantReady && state.registered && state.permissionsGranted
   Section("Conversation") {
     Button(
@@ -203,7 +211,11 @@ private fun ConversationSection(state: UiState, onStart: () -> Unit) {
     if (!ready && !state.running) {
       Text(
           "Finish the steps below first: permissions, linking the glasses, and " +
-              if (state.liveMode) "a Gemini API key." else "ChatGPT sign-in.",
+              when {
+                state.clawMode -> "the bridge address and token."
+                state.liveMode -> "a Gemini API key."
+                else -> "ChatGPT sign-in."
+              },
           style = MaterialTheme.typography.bodySmall,
       )
     }
@@ -211,7 +223,12 @@ private fun ConversationSection(state: UiState, onStart: () -> Unit) {
     if (state.partial.isNotEmpty()) Text("… ${state.partial}")
     if (state.question.isNotEmpty()) Text("You: ${state.question}")
     if (state.answer.isNotEmpty()) {
-      Text((if (state.liveMode) "Gemini: " else "GPT: ") + state.answer)
+      Text(
+          (when {
+            state.clawMode -> "Claw: "
+            state.liveMode -> "Gemini: "
+            else -> "GPT: "
+          }) + state.answer)
     }
     val latency = state.latencyMs
     if (latency != null) {
@@ -223,7 +240,8 @@ private fun ConversationSection(state: UiState, onStart: () -> Unit) {
     val frame = state.frame
     if (frame != null) {
       Text(
-          if (state.liveMode) "What the model sees now:" else "Frame sent with the question:",
+          if (state.liveMode && !state.clawMode) "What the model sees now:"
+          else "Frame sent with the question:",
           style = MaterialTheme.typography.bodySmall,
       )
       Image(
@@ -280,6 +298,76 @@ private fun GlassesSection(
       OutlinedButton(onClick = onRegister, enabled = state.permissionsGranted) {
         Text("Link glasses through Meta AI")
       }
+    }
+  }
+}
+
+/** ClawSpecs: where your own agent lives. New section, not in upstream Tupo Vision. */
+@Composable
+private fun ClawSection(state: UiState) {
+  Section("2. Your agent (ClawSpecs bridge)") {
+    SettingSwitch(
+        title = "Answer with my agent",
+        subtitle =
+            "Questions go to the bridge running on your own machine, and from there to your " +
+                "agent. Off: the original Tupo Vision assistants (ChatGPT or Gemini Live).",
+        checked = state.clawMode,
+        enabled = !state.running,
+        onChange = { Engine.setClawMode(it) },
+    )
+    if (state.clawMode) {
+      var url by remember(state.clawUrl) { mutableStateOf(state.clawUrl) }
+      OutlinedTextField(
+          value = url,
+          onValueChange = { url = it },
+          label = { Text("Bridge address, e.g. http://100.x.y.z:8791") },
+          singleLine = true,
+          enabled = !state.running,
+          modifier = Modifier.fillMaxWidth(),
+      )
+      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(
+            onClick = { Engine.setClawUrl(url) },
+            enabled = url.isNotBlank() && url != state.clawUrl,
+        ) {
+          Text("Save address")
+        }
+        OutlinedButton(
+            onClick = { Engine.testClaw() },
+            enabled = state.clawUrl.isNotEmpty() && state.clawTokenSet,
+        ) {
+          Text("Test")
+        }
+      }
+      StatusLine(state.clawTokenSet, "Bridge token saved on this phone")
+      if (state.clawTokenSet) {
+        TextButton(onClick = { Engine.clearClawToken() }) { Text("Delete token") }
+      } else {
+        var draft by remember { mutableStateOf("") }
+        OutlinedTextField(
+            value = draft,
+            onValueChange = { draft = it },
+            label = { Text("Bridge token") },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Button(
+            onClick = {
+              Engine.setClawToken(draft)
+              draft = ""
+            },
+            enabled = draft.isNotBlank(),
+        ) {
+          Text("Save token")
+        }
+      }
+      Text(
+          "Keep the bridge on a private network such as Tailscale. The token is stored " +
+              "encrypted on this phone and only sent to the bridge.",
+          style = MaterialTheme.typography.bodySmall,
+      )
     }
   }
 }
@@ -394,9 +482,9 @@ private fun SettingsSection(state: UiState, onNotificationAccess: () -> Unit) {
     if (!state.mediaAccess) {
       OutlinedButton(onClick = onNotificationAccess) { Text("Grant notification access") }
       Text(
-          "Android only lets an app see which music app is playing with this access. Tupo " +
-              "Vision reads no notifications. If the switch there is greyed out, open " +
-              "Android Settings → Apps → Tupo Vision → ⋮ → Allow restricted settings first.",
+          "Android only lets an app see which music app is playing with this access. ClawSpecs " +
+              "reads no notifications. If the switch there is greyed out, open " +
+              "Android Settings → Apps → ClawSpecs → ⋮ → Allow restricted settings first.",
           style = MaterialTheme.typography.bodySmall,
       )
     }
@@ -446,8 +534,10 @@ private fun SettingsSection(state: UiState, onNotificationAccess: () -> Unit) {
     OutlinedTextField(
         value = state.wakeWord,
         onValueChange = { Engine.setWakeWord(it) },
-        label = { Text("Wake word (optional)") },
-        supportingText = { Text("ChatGPT mode only: answer only phrases that contain this word.") },
+        label = { Text("Wake phrases (comma separated, empty = always listen)") },
+        supportingText = {
+          Text("Only answer phrases that contain one of these, e.g. “hey claw, oye claw”.")
+        },
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
     )
