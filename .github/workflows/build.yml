@@ -60,14 +60,16 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/signing.p12"
 
-      # The result goes to the `ci` branch too, so a build can be checked with plain git.
+      # Logs and status go to the `ci` branch, so a build can be checked with plain git. The APK does
+      # not: with the wake-phrase model it is over GitHub's 100 MB file limit. It is in the release.
       - name: Publish result to the ci branch
         if: always()
         run: |
           mkdir -p out
           tail -n 400 build.log > out/build-tail.log || true
           grep -nE "^e: |error:|FAILED|What went wrong|Could not" build.log | head -n 200 > out/errors.log || true
-          cp app/build/outputs/apk/debug/app-debug.apk out/metaclaw.apk || true
+          mkdir -p apk
+          cp app/build/outputs/apk/debug/app-debug.apk apk/metaclaw.apk || true
           echo "${{ github.sha }} ${{ steps.build.outcome }} run=${{ github.run_number }} signing=${{ steps.signing.outputs.kind }}" > out/STATUS
           cd out
           git init -q -b ci
@@ -82,14 +84,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: metaclaw-apk
-          path: out/metaclaw.apk
+          path: apk/metaclaw.apk
 
       - name: Publish release
         if: success()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          SHA256=$(sha256sum out/metaclaw.apk | cut -d' ' -f1)
+          SHA256=$(sha256sum apk/metaclaw.apk | cut -d' ' -f1)
           {
             echo "Built from commit ${{ github.sha }}."
             echo
@@ -97,7 +99,7 @@ jobs:
             echo "SHA-256 of metaclaw.apk: $SHA256"
           } > notes.md
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest out/metaclaw.apk \
+          gh release create latest apk/metaclaw.apk \
             --target "${{ github.sha }}" \
             --title "MetaClaw build ${{ github.run_number }}" \
             --notes-file notes.md
