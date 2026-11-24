@@ -13,3 +13,8 @@ local.properties
 *.keystore
 *.jks
 *.p12
+
+# Downloaded by scripts/get-wake-model.sh
+app/src/main/assets/model-es/
+tools/clips/
+tools/.venv/

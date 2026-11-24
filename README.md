@@ -40,10 +40,22 @@ The original Tupo Vision modes (GPT on a ChatGPT plan, Gemini Live) are still th
 
 ### Wake phrase
 
-Default: `hey claw, oye claw` (editable, comma separated; empty = answer everything). Spanish
-speech recognition rarely writes "Claw": it hears *clo*, *clau*, *claus*… and "hey" comes back
-as *ey* or *hei*. The app folds those sound-alikes before matching, so "Oye, Claus, ¿qué hora
-es?" works. An offline hotword engine (Vosk) is on the [plan](docs/PLAN.md).
+Default: `hey claw, oye claw` (editable, comma separated; empty = answer everything).
+
+**Offline (default).** While waiting, the phone runs a small Spanish [Vosk](https://alphacephei.com/vosk/)
+model that only knows a few dozen words: "hey", "oye", the name as it hears it (*clo*, *clau*)
+and look-alikes such as *claro*, *clausura* or *cola*, so everyday speech lands on those. No
+audio leaves the phone until it hears the phrase. Then it **beeps**, and Android's speech
+recognition takes your question: say "Oye Claw", wait for the beep, then ask.
+`tools/wake_test.py` checks the rule on synthetic voices: 124/129 right, no false wake in 96
+look-alike sentences (the misses are US English voices). Real voices through the glasses
+microphone are still to be tested.
+
+**Without the model** (switch "Offline wake phrase" off, or a build without it), the wake phrase
+rides on Android's continuous speech recognition. Spanish recognition rarely writes "Claw": it
+hears *clo*, *clau*, *claus*… and "hey" comes back as *ey* or *hei*. The app folds those before
+matching, so "Oye, Claus, ¿qué hora es?" works in one go, at the cost of more battery and,
+depending on the phone, audio going to Google's recognizer.
 
 ## What you need
 
@@ -77,6 +89,11 @@ Whatever it prints on stdout is spoken. For OpenClaw use
 [`bridge/examples/openclaw-agent.sh`](bridge/examples/openclaw-agent.sh), which calls
 `openclaw agent` and tells the agent where the picture is. Any other agent works the same way.
 
+To keep it running, [`bridge/examples/metaclaw-bridge.service`](bridge/examples/metaclaw-bridge.service)
+is a systemd user service that reads the variables from a private env file. With OpenClaw on the
+same machine, a text question takes about 3.5 s end to end and a question with a picture about 5 s
+(measured with Claude Sonnet and thinking off).
+
 The bridge never logs questions or answers, only timings. Frames are written to a private temp
 file and deleted after each question.
 
@@ -85,6 +102,7 @@ file and deleted after each question.
 Build it (JDK 17 and the Android SDK; Gradle comes with the wrapper):
 
 ```bash
+scripts/get-wake-model.sh      # offline wake-phrase model, ~40 MB (optional)
 ./gradlew assembleDebug        # app/build/outputs/apk/debug/app-debug.apk
 ```
 
@@ -100,7 +118,8 @@ MetaClaw stands on other people's work. Here is exactly what comes from where.
 |---|---|---|
 | [**Tupo Vision**](https://github.com/KeonyRus/tupo_vision) by KeonyRus | MIT | **The whole app is a fork of it**, with its full git history kept. Glasses connection, camera frames, temple-tap pause, speech recognition and TTS plumbing, background service, ChatGPT and Gemini Live modes, the UI, the build. Its original README is in [`docs/UPSTREAM-README.md`](docs/UPSTREAM-README.md). |
 | [**Meta Wearables Device Access Toolkit**](https://github.com/meta/meta-wearables-dat-android) (`mwdat-core`, `mwdat-camera`) | Meta's own license | Pulled from Maven Central as a dependency, not included in this repository. Its use is governed by [Meta's terms](https://wearables.developer.meta.com/docs/develop/). It is a developer preview; Meta does not allow apps using its audio and camera features in app stores yet, so MetaClaw is for sideloading only. |
-| [**CJ** / rayban-meta-god-mode](https://github.com/GhanshyamPaunikar/rayban-meta-god-mode) by Ghanshyam Paunikar | MIT | Idea of an own wake word that lives alongside "Hey Meta". **No code copied yet.** If its Vosk hotword code is adopted later, its MIT notice will be added to [`NOTICE.md`](NOTICE.md). |
+| [**CJ** / rayban-meta-god-mode](https://github.com/GhanshyamPaunikar/rayban-meta-god-mode) by Ghanshyam Paunikar | MIT | Idea of an own wake word that lives alongside "Hey Meta", and the offline Vosk hotword approach: `Hotword.kt`, `WakeRule.kt`, `tools/wake_test.py` and `scripts/get-wake-model.sh` are **adapted from its code**. Details and its MIT notice in [`NOTICE.md`](NOTICE.md) and [`licenses/CJ-MIT-LICENSE`](licenses/CJ-MIT-LICENSE). |
+| [**Vosk**](https://github.com/alphacep/vosk-api) and its small Spanish model by Alpha Cephei | Apache-2.0 | Offline wake phrase. The library is a Maven dependency; the model is downloaded at build time (pinned SHA-256) and bundled in the APK, not stored in this repository. |
 | [**Visor**](https://github.com/macedonga/visor) by macedonga | AGPL-3.0 | Inspiration only, for the idea of a personal agent in the glasses. **No code copied**, on purpose: Visor is AGPL and works by reverse engineering the glasses protocol; MetaClaw uses Meta's official toolkit instead. |
 | [**agentring**](https://github.com/mutonby/agentring) by mutonby | Apache-2.0 | Not included. Mentioned because it is the voice-call path to the same agent we already use; the bridge prompt follows the same "short answer for speech" idea. |
 | [**OpenClaw**](https://github.com/openclaw/openclaw) | see its repository | Not included. The example agent script calls its CLI. |

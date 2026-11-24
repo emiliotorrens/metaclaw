@@ -1,0 +1,18 @@
+# Example systemd user service for the bridge. Copy to ~/.config/systemd/user/, then:
+#   systemctl --user daemon-reload && systemctl --user enable --now metaclaw-bridge
+# Keep the token in the env file only (chmod 600), e.g.:
+#   METACLAW_TOKEN=<openssl rand -hex 24>
+#   METACLAW_HOST=<this machine's Tailscale IP>
+#   METACLAW_AGENT_CMD=%h/.metaclaw/ask-agent.sh
+[Unit]
+Description=MetaClaw bridge
+After=network-online.target
+
+[Service]
+EnvironmentFile=%h/.metaclaw/env
+ExecStart=/usr/bin/node %h/metaclaw/bridge/metaclaw-bridge.mjs
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

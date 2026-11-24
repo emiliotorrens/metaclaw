@@ -28,6 +28,10 @@ jobs:
       # Also checks that the Gradle wrapper jar in the repository is a genuine one.
       - uses: gradle/actions/setup-gradle@v4
 
+      # Offline wake-phrase model (Vosk small Spanish, Apache 2.0), checked against a pinned SHA-256.
+      - name: Fetch wake-phrase model
+        run: scripts/get-wake-model.sh
+
       # The signing key lives only in the repository's Actions secrets. Forks and pull requests do
       # not get secrets, so their builds fall back to a throwaway key.
       - name: Prepare signing key
@@ -50,7 +54,7 @@ jobs:
         run: |
           set -o pipefail
           chmod +x gradlew
-          ./gradlew --no-daemon --stacktrace assembleDebug 2>&1 | tee build.log
+          ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleDebug 2>&1 | tee build.log
 
       - name: Remove signing key from the runner
         if: always()

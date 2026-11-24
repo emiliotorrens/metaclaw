@@ -8,6 +8,8 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.net.Uri
 import android.os.SystemClock
 import android.speech.SpeechRecognizer
@@ -92,6 +94,10 @@ data class UiState(
     val clawMode: Boolean = true,
     val clawUrl: String = "",
     val clawTokenSet: Boolean = false,
+    /** MetaClaw: wait for the wake phrase with the on-phone Vosk model instead of speech recognition. */
+    val offlineWake: Boolean = true,
+    /** False when the APK was built without the wake-word model. */
+    val offlineWakeAvailable: Boolean = false,
     val geminiKeySet: Boolean = false,
     val bargeIn: Boolean = true,
     /** A gesture on the glasses starts and stops the conversation. Not kept across restarts. */
@@ -152,6 +158,12 @@ object Engine {
   private var voiceActive = false
   private var turnJob: Job? = null
   private var errorStreak = 0
+  // Offline wake phrase: the listener, and whether the current utterance follows a wake phrase.
+  private var hotword: Hotword? = null
+  private var wakeJob: Job? = null
+  private var wokeOffline = false
+  // Set when the offline model failed this session; speech recognition takes over until restart.
+  private var offlineWakeBroken = false
   private val history = ArrayDeque<Turn>()
 
   // Live voice
@@ -180,6 +192,8 @@ object Engine {
           clawMode = prefs.getBoolean("claw_mode", true),
           clawUrl = prefs.getString("claw_url", "") ?: "",
           clawTokenSet = SecureStore.get(app, CLAW_TOKEN) != null,
+          offlineWake = prefs.getBoolean("offline_wake", true),
+          offlineWakeAvailable = Hotword(app).available(),
           bargeIn = prefs.getBoolean("barge_in", true),
           triggerPackage =
               prefs.getString("trigger_package", null) ?: MediaWatch.DEFAULT_TRIGGER,
@@ -379,6 +393,11 @@ object Engine {
   fun setClawMode(value: Boolean) {
     update { it.copy(clawMode = value) }
     prefs().edit().putBoolean("claw_mode", value).apply()
+  }
+
+  fun setOfflineWake(value: Boolean) {
+    update { it.copy(offlineWake = value) }
+    prefs().edit().putBoolean("offline_wake", value).apply()
   }
 
   fun setClawUrl(value: String) {
@@ -685,6 +704,9 @@ object Engine {
     voiceActive = false
     turnJob?.cancel()
     turnJob = null
+    wakeJob?.cancel()
+    wakeJob = null
+    offlineWakeBroken = false
     stt?.destroy()
     stt = null
     tts?.stop()
@@ -760,6 +782,8 @@ object Engine {
     voiceActive = false
     turnJob?.cancel()
     turnJob = null
+    wakeJob?.cancel()
+    wakeJob = null
     stt?.cancel()
     tts?.stop()
     // The live session is closed too; its handle lets the next one pick the conversation up.
@@ -773,6 +797,65 @@ object Engine {
   }
 
   private fun listen() {
+    if (!voiceActive) return
+    wokeOffline = false
+    if (useOfflineWake()) {
+      listenForWake()
+      return
+    }
+    startRecognizer()
+  }
+
+  private fun useOfflineWake(): Boolean {
+    val s = _state.value
+    return s.clawMode && s.offlineWake && s.offlineWakeAvailable && !offlineWakeBroken &&
+        wakePhrases(s.wakeWord).isNotEmpty()
+  }
+
+  /**
+   * Waits for "hey Claw" / "oye Claw" on the phone, without sending audio anywhere, then beeps and
+   * lets speech recognition take the question.
+   */
+  private fun listenForWake() {
+    if (wakeJob?.isActive == true) return
+    update { it.copy(phase = Phase.LISTENING, partial = "") }
+    val listener = hotword ?: Hotword(app).also { hotword = it }
+    wakeJob =
+        scope.launch {
+          val heard =
+              try {
+                listener.await(AudioRouter.inputDevice(app))
+              } catch (e: CancellationException) {
+                throw e
+              } catch (e: Exception) {
+                offlineWakeBroken = true
+                log("Offline wake phrase failed (${e.message}), using speech recognition")
+                if (voiceActive) startRecognizer()
+                return@launch
+              }
+          if (!voiceActive || heard.isEmpty()) return@launch
+          log("Wake phrase heard on the phone")
+          beep()
+          wokeOffline = true
+          startRecognizer()
+        }
+  }
+
+  /** A short pip so you know it is listening for the question. */
+  private fun beep() {
+    runCatching {
+      val stream =
+          if (AudioRouter.isRouted) AudioManager.STREAM_VOICE_CALL else AudioManager.STREAM_MUSIC
+      val tone = ToneGenerator(stream, 80)
+      tone.startTone(ToneGenerator.TONE_PROP_BEEP, 150)
+      scope.launch {
+        delay(400)
+        tone.release()
+      }
+    }
+  }
+
+  private fun startRecognizer() {
     if (!voiceActive) return
     update { it.copy(phase = Phase.LISTENING, partial = "") }
     try {
@@ -789,7 +872,7 @@ object Engine {
   private fun listenAfter(delayMs: Long) {
     scope.launch {
       delay(delayMs)
-      if (voiceActive && turnJob?.isActive != true) listen()
+      if (voiceActive && turnJob?.isActive != true && wakeJob?.isActive != true) listen()
     }
   }
 
@@ -843,12 +926,15 @@ object Engine {
           phrases
               .mapNotNull { p -> Regex("\\b" + Regex.escape(p) + "\\b").find(normalized) }
               .minByOrNull { it.range.first }
-      if (match == null) {
+      // After an offline wake phrase the question comes on its own, without the phrase.
+      if (match == null && !wokeOffline) {
         listen()
         return
       }
-      question =
-          normalized.substring(match.range.last + 1).trim().trimStart(',', '.', '!', '?', ' ')
+      if (match != null) {
+        question =
+            normalized.substring(match.range.last + 1).trim().trimStart(',', '.', '!', '?', ' ')
+      }
       if (question.isEmpty()) {
         listen()
         return

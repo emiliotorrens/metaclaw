@@ -27,6 +27,9 @@ android {
     // the Wearables Developer Center.
     manifestPlaceholders["mwdat_application_id"] = "0"
     manifestPlaceholders["mwdat_client_token"] = "0"
+
+    // Vosk ships native code for seven ABIs; phones are arm64, the emulator x86_64. Saves ~30 MB.
+    ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
   }
 
   signingConfigs {
@@ -71,4 +74,8 @@ dependencies {
   implementation(libs.okhttp)
   implementation(libs.mwdat.core)
   implementation(libs.mwdat.camera)
+  // Offline wake phrase. Vosk needs JNA as an Android AAR, not the desktop jar.
+  implementation(libs.vosk.android) { exclude(group = "net.java.dev.jna") }
+  implementation("net.java.dev.jna:jna:5.18.1@aar")
+  testImplementation(libs.junit)
 }

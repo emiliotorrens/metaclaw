@@ -531,6 +531,19 @@ private fun SettingsSection(state: UiState, onNotificationAccess: () -> Unit) {
         enabled = !state.running,
         modifier = Modifier.fillMaxWidth(),
     )
+    if (state.clawMode) {
+      SettingSwitch(
+          title = "Offline wake phrase",
+          subtitle =
+              if (state.offlineWakeAvailable)
+                  "Waits for “hey Claw” / “oye Claw” on the phone (Vosk, Spanish), no audio leaves it. " +
+                      "After the beep, ask your question."
+              else "This build has no wake-word model (scripts/get-wake-model.sh).",
+          checked = state.offlineWake && state.offlineWakeAvailable,
+          enabled = !state.running && state.offlineWakeAvailable,
+          onChange = { Engine.setOfflineWake(it) },
+      )
+    }
     OutlinedTextField(
         value = state.wakeWord,
         onValueChange = { Engine.setWakeWord(it) },
