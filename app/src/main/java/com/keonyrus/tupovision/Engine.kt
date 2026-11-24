@@ -88,7 +88,7 @@ data class UiState(
     val language: String = "en-US",
     /** True: live voice through Gemini Live. False: ChatGPT plan with on-phone speech. */
     val liveMode: Boolean = false,
-    /** ClawSpecs: questions go to your own agent through the bridge. Wins over [liveMode]. */
+    /** MetaClaw: questions go to your own agent through the bridge. Wins over [liveMode]. */
     val clawMode: Boolean = true,
     val clawUrl: String = "",
     val clawTokenSet: Boolean = false,
@@ -977,7 +977,7 @@ object Engine {
           .replace(Regex("\\b(oie|olle|oiga|oi) claw\\b"), "oye claw")
           .trim()
 
-  /** ClawSpecs: one question to the bridge, the whole answer spoken when it arrives. */
+  /** MetaClaw: one question to the bridge, the whole answer spoken when it arrives. */
   private suspend fun runClawTurn(question: String) {
     val startedAt = SystemClock.elapsedRealtime()
     update {

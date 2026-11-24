@@ -1,16 +1,16 @@
-# ClawSpecs 🐾🕶️
+# MetaClaw 🐾🕶️
 
 **Talk to your own AI agent through Ray-Ban Meta glasses.** Say *"hey Claw"* or *"oye Claw"*,
 ask, and the answer comes back through the glasses speakers. Ask *"what am I looking at?"* and a
 picture from the glasses camera goes along with the question.
 
-"Hey Meta" keeps working and keeps going to Meta. ClawSpecs listens for its own wake phrase, so
+"Hey Meta" keeps working and keeps going to Meta. MetaClaw listens for its own wake phrase, so
 both live side by side.
 
-ClawSpecs is a fork of **[Tupo Vision](https://github.com/KeonyRus/tupo_vision)** by KeonyRus
+MetaClaw is a fork of **[Tupo Vision](https://github.com/KeonyRus/tupo_vision)** by KeonyRus
 (MIT). Tupo Vision did the hard part: the glasses connection through Meta's official toolkit,
 camera frames, temple-tap control and the background service that keeps it all alive with the
-phone in a pocket. ClawSpecs adds a third brain next to its ChatGPT and Gemini modes: **your
+phone in a pocket. MetaClaw adds a third brain next to its ChatGPT and Gemini modes: **your
 own agent**, reached through a small bridge on your own machine. See [Credits and
 licenses](#credits-and-licenses).
 
@@ -21,8 +21,8 @@ licenses](#credits-and-licenses).
 ## How it works
 
 ```
-Ray-Ban Meta ──Bluetooth──▶ Android phone (ClawSpecs) ──private network──▶ bridge ──▶ your agent
-   mic, camera,               speech recognition,         e.g. Tailscale      clawspecs-bridge.mjs   OpenClaw or
+Ray-Ban Meta ──Bluetooth──▶ Android phone (MetaClaw) ──private network──▶ bridge ──▶ your agent
+   mic, camera,               speech recognition,         e.g. Tailscale      metaclaw-bridge.mjs   OpenClaw or
    speakers                   wake phrase, TTS                                                       anything else
 ```
 
@@ -59,19 +59,19 @@ es?" works. An offline hotword engine (Vosk) is on the [plan](docs/PLAN.md).
 ### 1. Bridge
 
 ```bash
-export CLAWSPECS_TOKEN=$(openssl rand -hex 24)       # keep it, the app needs it
-export CLAWSPECS_AGENT_CMD=$PWD/bridge/examples/echo-agent.sh   # start with the echo agent
-export CLAWSPECS_HOST=100.x.y.z                       # your Tailscale IP, never 0.0.0.0 on a public host
-node bridge/clawspecs-bridge.mjs
+export METACLAW_TOKEN=$(openssl rand -hex 24)       # keep it, the app needs it
+export METACLAW_AGENT_CMD=$PWD/bridge/examples/echo-agent.sh   # start with the echo agent
+export METACLAW_HOST=100.x.y.z                       # your Tailscale IP, never 0.0.0.0 on a public host
+node bridge/metaclaw-bridge.mjs
 ```
 
 The command gets the question as its first argument and these variables:
 
 | Variable | Content |
 |---|---|
-| `CLAWSPECS_IMAGE` | path to a JPEG from the glasses camera, or empty |
-| `CLAWSPECS_CONVERSATION_ID` | same value for every question of one conversation |
-| `CLAWSPECS_LANGUAGE` | phone language tag, e.g. `es-ES` |
+| `METACLAW_IMAGE` | path to a JPEG from the glasses camera, or empty |
+| `METACLAW_CONVERSATION_ID` | same value for every question of one conversation |
+| `METACLAW_LANGUAGE` | phone language tag, e.g. `es-ES` |
 
 Whatever it prints on stdout is spoken. For OpenClaw use
 [`bridge/examples/openclaw-agent.sh`](bridge/examples/openclaw-agent.sh), which calls
@@ -94,23 +94,23 @@ under **2. Your agent** enter the bridge address (`http://100.x.y.z:8791`) and t
 
 ## Credits and licenses
 
-ClawSpecs stands on other people's work. Here is exactly what comes from where.
+MetaClaw stands on other people's work. Here is exactly what comes from where.
 
 | Project | License | What we use |
 |---|---|---|
 | [**Tupo Vision**](https://github.com/KeonyRus/tupo_vision) by KeonyRus | MIT | **The whole app is a fork of it**, with its full git history kept. Glasses connection, camera frames, temple-tap pause, speech recognition and TTS plumbing, background service, ChatGPT and Gemini Live modes, the UI, the build. Its original README is in [`docs/UPSTREAM-README.md`](docs/UPSTREAM-README.md). |
-| [**Meta Wearables Device Access Toolkit**](https://github.com/meta/meta-wearables-dat-android) (`mwdat-core`, `mwdat-camera`) | Meta's own license | Pulled from Maven Central as a dependency, not included in this repository. Its use is governed by [Meta's terms](https://wearables.developer.meta.com/docs/develop/). It is a developer preview; Meta does not allow apps using its audio and camera features in app stores yet, so ClawSpecs is for sideloading only. |
+| [**Meta Wearables Device Access Toolkit**](https://github.com/meta/meta-wearables-dat-android) (`mwdat-core`, `mwdat-camera`) | Meta's own license | Pulled from Maven Central as a dependency, not included in this repository. Its use is governed by [Meta's terms](https://wearables.developer.meta.com/docs/develop/). It is a developer preview; Meta does not allow apps using its audio and camera features in app stores yet, so MetaClaw is for sideloading only. |
 | [**CJ** / rayban-meta-god-mode](https://github.com/GhanshyamPaunikar/rayban-meta-god-mode) by Ghanshyam Paunikar | MIT | Idea of an own wake word that lives alongside "Hey Meta". **No code copied yet.** If its Vosk hotword code is adopted later, its MIT notice will be added to [`NOTICE.md`](NOTICE.md). |
-| [**Visor**](https://github.com/macedonga/visor) by macedonga | AGPL-3.0 | Inspiration only, for the idea of a personal agent in the glasses. **No code copied**, on purpose: Visor is AGPL and works by reverse engineering the glasses protocol; ClawSpecs uses Meta's official toolkit instead. |
+| [**Visor**](https://github.com/macedonga/visor) by macedonga | AGPL-3.0 | Inspiration only, for the idea of a personal agent in the glasses. **No code copied**, on purpose: Visor is AGPL and works by reverse engineering the glasses protocol; MetaClaw uses Meta's official toolkit instead. |
 | [**agentring**](https://github.com/mutonby/agentring) by mutonby | Apache-2.0 | Not included. Mentioned because it is the voice-call path to the same agent we already use; the bridge prompt follows the same "short answer for speech" idea. |
 | [**OpenClaw**](https://github.com/openclaw/openclaw) | see its repository | Not included. The example agent script calls its CLI. |
 | Other libraries (OkHttp, Jetpack Compose, AndroidX, Kotlin coroutines…) | Apache-2.0 | Dependencies declared in `gradle/libs.versions.toml`, unchanged from Tupo Vision. |
 
-ClawSpecs itself is released under the **MIT license**, same as Tupo Vision. The
+MetaClaw itself is released under the **MIT license**, same as Tupo Vision. The
 [`LICENSE`](LICENSE) file keeps KeonyRus's copyright notice, as MIT requires, and adds ours for
 the changes. [`NOTICE.md`](NOTICE.md) lists what was changed from upstream.
 
-"Ray-Ban" and "Meta" are trademarks of their owners. ClawSpecs is an independent project and is
+"Ray-Ban" and "Meta" are trademarks of their owners; "Meta" in the name only says which glasses it works with. MetaClaw is an independent project and is
 not endorsed by Meta, EssilorLuxottica, KeonyRus or any project above.
 
 ## Security notes

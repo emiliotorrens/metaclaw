@@ -63,7 +63,7 @@ jobs:
           mkdir -p out
           tail -n 400 build.log > out/build-tail.log || true
           grep -nE "^e: |error:|FAILED|What went wrong|Could not" build.log | head -n 200 > out/errors.log || true
-          cp app/build/outputs/apk/debug/app-debug.apk out/clawspecs.apk || true
+          cp app/build/outputs/apk/debug/app-debug.apk out/metaclaw.apk || true
           echo "${{ github.sha }} ${{ steps.build.outcome }} run=${{ github.run_number }} signing=${{ steps.signing.outputs.kind }}" > out/STATUS
           cd out
           git init -q -b ci
@@ -77,23 +77,23 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: clawspecs-apk
-          path: out/clawspecs.apk
+          name: metaclaw-apk
+          path: out/metaclaw.apk
 
       - name: Publish release
         if: success()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          SHA256=$(sha256sum out/clawspecs.apk | cut -d' ' -f1)
+          SHA256=$(sha256sum out/metaclaw.apk | cut -d' ' -f1)
           {
             echo "Built from commit ${{ github.sha }}."
             echo
             echo "Signed with: ${{ steps.signing.outputs.kind }}"
-            echo "SHA-256 of clawspecs.apk: $SHA256"
+            echo "SHA-256 of metaclaw.apk: $SHA256"
           } > notes.md
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest out/clawspecs.apk \
+          gh release create latest out/metaclaw.apk \
             --target "${{ github.sha }}" \
-            --title "ClawSpecs build ${{ github.run_number }}" \
+            --title "MetaClaw build ${{ github.run_number }}" \
             --notes-file notes.md

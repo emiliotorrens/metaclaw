@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: MIT
-// ClawSpecs bridge: receives a question (and optionally a JPEG frame) from the ClawSpecs app and
+// MetaClaw bridge: receives a question (and optionally a JPEG frame) from the MetaClaw app and
 // hands it to your agent through a command you choose. No dependencies, Node 18+.
 //
 // Environment:
-//   CLAWSPECS_TOKEN      required. Shared secret; the app sends it as a Bearer token.
-//   CLAWSPECS_AGENT_CMD  required. Executable called as: <cmd> "<question>". Its stdout is the answer.
-//                        It also gets CLAWSPECS_IMAGE (path to a JPEG, or empty),
-//                        CLAWSPECS_CONVERSATION_ID and CLAWSPECS_LANGUAGE in its environment.
-//   CLAWSPECS_HOST       address to listen on (default 127.0.0.1). Use your Tailscale IP, never 0.0.0.0
+//   METACLAW_TOKEN      required. Shared secret; the app sends it as a Bearer token.
+//   METACLAW_AGENT_CMD  required. Executable called as: <cmd> "<question>". Its stdout is the answer.
+//                        It also gets METACLAW_IMAGE (path to a JPEG, or empty),
+//                        METACLAW_CONVERSATION_ID and METACLAW_LANGUAGE in its environment.
+//   METACLAW_HOST       address to listen on (default 127.0.0.1). Use your Tailscale IP, never 0.0.0.0
 //                        on a machine reachable from the internet.
-//   CLAWSPECS_PORT       default 8791.
-//   CLAWSPECS_TIMEOUT_S  how long the agent may take (default 110, below the app's 120 s read timeout).
+//   METACLAW_PORT       default 8791.
+//   METACLAW_TIMEOUT_S  how long the agent may take (default 110, below the app's 120 s read timeout).
 
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
@@ -20,20 +20,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { timingSafeEqual, createHash } from "node:crypto";
 
-const TOKEN = process.env.CLAWSPECS_TOKEN || "";
-const CMD = process.env.CLAWSPECS_AGENT_CMD || "";
-const HOST = process.env.CLAWSPECS_HOST || "127.0.0.1";
-const PORT = Number(process.env.CLAWSPECS_PORT || 8791);
-const TIMEOUT_MS = Number(process.env.CLAWSPECS_TIMEOUT_S || 110) * 1000;
+const TOKEN = process.env.METACLAW_TOKEN || "";
+const CMD = process.env.METACLAW_AGENT_CMD || "";
+const HOST = process.env.METACLAW_HOST || "127.0.0.1";
+const PORT = Number(process.env.METACLAW_PORT || 8791);
+const TIMEOUT_MS = Number(process.env.METACLAW_TIMEOUT_S || 110) * 1000;
 const MAX_BODY = 8 * 1024 * 1024;
 const MAX_ANSWER = 4000;
 
 if (TOKEN.length < 16) {
-  console.error("CLAWSPECS_TOKEN must be set (16+ characters). Try: openssl rand -hex 24");
+  console.error("METACLAW_TOKEN must be set (16+ characters). Try: openssl rand -hex 24");
   process.exit(2);
 }
 if (!CMD) {
-  console.error("CLAWSPECS_AGENT_CMD must point to the command that asks your agent.");
+  console.error("METACLAW_AGENT_CMD must point to the command that asks your agent.");
   process.exit(2);
 }
 
@@ -118,14 +118,14 @@ async function handleAsk(req, res) {
     if (payload.image_jpeg_b64) {
       const jpeg = Buffer.from(String(payload.image_jpeg_b64), "base64");
       if (jpeg[0] !== 0xff || jpeg[1] !== 0xd8) return send(res, 400, { error: "Image is not a JPEG" });
-      dir = await mkdtemp(join(tmpdir(), "clawspecs-"));
+      dir = await mkdtemp(join(tmpdir(), "metaclaw-"));
       image = join(dir, "frame.jpg");
       await writeFile(image, jpeg, { mode: 0o600 });
     }
     const answer = await runAgent(question, {
-      CLAWSPECS_IMAGE: image,
-      CLAWSPECS_CONVERSATION_ID: conversation,
-      CLAWSPECS_LANGUAGE: language,
+      METACLAW_IMAGE: image,
+      METACLAW_CONVERSATION_ID: conversation,
+      METACLAW_LANGUAGE: language,
     });
     if (!answer) return send(res, 502, { error: "The agent returned nothing" });
     // Content of questions and answers is never logged, only timing.
@@ -147,4 +147,4 @@ const server = createServer((req, res) => {
   send(res, 404, { error: "Not found" });
 });
 
-server.listen(PORT, HOST, () => console.log(`ClawSpecs bridge on http://${HOST}:${PORT}`));
+server.listen(PORT, HOST, () => console.log(`MetaClaw bridge on http://${HOST}:${PORT}`));

@@ -143,7 +143,7 @@ class MainActivity : ComponentActivity() {
 
   private fun copyLog() {
     val clipboard = getSystemService(ClipboardManager::class.java)
-    clipboard.setPrimaryClip(ClipData.newPlainText("ClawSpecs log", Engine.logText()))
+    clipboard.setPrimaryClip(ClipData.newPlainText("MetaClaw log", Engine.logText()))
   }
 }
 
@@ -167,7 +167,7 @@ private fun Screen(
               .padding(16.dp),
       verticalArrangement = Arrangement.spacedBy(12.dp),
   ) {
-    Text("ClawSpecs", style = MaterialTheme.typography.headlineSmall)
+    Text("MetaClaw", style = MaterialTheme.typography.headlineSmall)
 
     val error = state.error
     if (error != null) {
@@ -302,10 +302,10 @@ private fun GlassesSection(
   }
 }
 
-/** ClawSpecs: where your own agent lives. New section, not in upstream Tupo Vision. */
+/** MetaClaw: where your own agent lives. New section, not in upstream Tupo Vision. */
 @Composable
 private fun ClawSection(state: UiState) {
-  Section("2. Your agent (ClawSpecs bridge)") {
+  Section("2. Your agent (MetaClaw bridge)") {
     SettingSwitch(
         title = "Answer with my agent",
         subtitle =
@@ -482,9 +482,9 @@ private fun SettingsSection(state: UiState, onNotificationAccess: () -> Unit) {
     if (!state.mediaAccess) {
       OutlinedButton(onClick = onNotificationAccess) { Text("Grant notification access") }
       Text(
-          "Android only lets an app see which music app is playing with this access. ClawSpecs " +
+          "Android only lets an app see which music app is playing with this access. MetaClaw " +
               "reads no notifications. If the switch there is greyed out, open " +
-              "Android Settings → Apps → ClawSpecs → ⋮ → Allow restricted settings first.",
+              "Android Settings → Apps → MetaClaw → ⋮ → Allow restricted settings first.",
           style = MaterialTheme.typography.bodySmall,
       )
     }

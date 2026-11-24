@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Part of ClawSpecs. New file, not in upstream Tupo Vision.
+// Part of MetaClaw. New file, not in upstream Tupo Vision.
 package com.keonyrus.tupovision
 
 import android.util.Base64
@@ -23,7 +23,7 @@ import kotlin.coroutines.resumeWithException
 class ClawException(val status: Int, message: String) : IOException(message)
 
 /**
- * Client for the ClawSpecs bridge (see `bridge/` in this repository): a small HTTP service on
+ * Client for the MetaClaw bridge (see `bridge/` in this repository): a small HTTP service on
  * your own machine that hands the question, and optionally a camera frame, to your agent and
  * returns its answer as plain text for speech.
  *
