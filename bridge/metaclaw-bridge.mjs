@@ -96,6 +96,15 @@ function runAgent(question, env) {
   });
 }
 
+// "lat,lon,accuracy_m,age_s", or empty when the phone sent nothing usable.
+function parseLocation(loc) {
+  if (!loc || typeof loc !== "object") return "";
+  const lat = Number(loc.lat), lon = Number(loc.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return "";
+  const acc = Math.round(Number(loc.accuracy_m)), age = Math.round(Number(loc.age_s));
+  return [lat.toFixed(6), lon.toFixed(6), Number.isFinite(acc) ? acc : -1, Number.isFinite(age) ? age : -1].join(",");
+}
+
 async function handleAsk(req, res) {
   let payload;
   try {
@@ -124,12 +133,13 @@ async function handleAsk(req, res) {
     }
     const answer = await runAgent(question, {
       METACLAW_IMAGE: image,
+      METACLAW_LOCATION: parseLocation(payload.location),
       METACLAW_CONVERSATION_ID: conversation,
       METACLAW_LANGUAGE: language,
     });
     if (!answer) return send(res, 502, { error: "The agent returned nothing" });
     // Content of questions and answers is never logged, only timing.
-    console.log(`ask conv=${conversation} image=${image ? "yes" : "no"} ms=${Date.now() - started}`);
+    console.log(`ask conv=${conversation} image=${image ? "yes" : "no"} location=${payload.location ? "yes" : "no"} ms=${Date.now() - started}`);
     send(res, 200, { answer: answer.slice(0, MAX_ANSWER) });
   } catch (e) {
     console.error(`ask conv=${conversation} failed: ${e.message.split("\n")[0]}`);

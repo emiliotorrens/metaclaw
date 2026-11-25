@@ -84,6 +84,7 @@ The command gets the question as its first argument and these variables:
 | `METACLAW_IMAGE` | path to a JPEG from the glasses camera, or empty |
 | `METACLAW_CONVERSATION_ID` | same value for every question of one conversation |
 | `METACLAW_LANGUAGE` | phone language tag, e.g. `es-ES` |
+| `METACLAW_LOCATION` | `lat,lon,accuracy_m,age_s` of the phone, or empty (switch "Send my location" off, no permission, no fix) |
 
 Whatever it prints on stdout is spoken. For OpenClaw use
 [`bridge/examples/openclaw-agent.sh`](bridge/examples/openclaw-agent.sh), which calls
@@ -94,7 +95,7 @@ is a systemd user service that reads the variables from a private env file. With
 same machine, a text question takes about 3.5 s end to end and a question with a picture about 5 s
 (measured with Claude Sonnet and thinking off).
 
-The bridge never logs questions or answers, only timings. Frames are written to a private temp
+The bridge never logs questions, answers or locations, only timings. Frames are written to a private temp
 file and deleted after each question.
 
 ### 2. App

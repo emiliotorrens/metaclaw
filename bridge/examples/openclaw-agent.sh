@@ -17,6 +17,10 @@ PROMPT="[Spoken question from the smart glasses (MetaClaw). Answer in one or two
 if [[ -n "${METACLAW_LANGUAGE:-}" ]]; then
   PROMPT+=$'\n'"Answer in the language of the question (device language: ${METACLAW_LANGUAGE})."
 fi
+if [[ -n "${METACLAW_LOCATION:-}" ]]; then
+  IFS=, read -r LAT LON ACC AGE <<<"$METACLAW_LOCATION"
+  PROMPT+=$'\n'"The user's phone is at latitude ${LAT}, longitude ${LON} (accuracy ${ACC} m, fix ${AGE} s old). Use it for questions about where they are or what is nearby; do not mention the coordinates."
+fi
 if [[ -n "${METACLAW_IMAGE:-}" ]]; then
   PROMPT+=$'\n'"The glasses camera took this picture of what the user is looking at: ${METACLAW_IMAGE} . Open it with your image reader before answering."
 fi

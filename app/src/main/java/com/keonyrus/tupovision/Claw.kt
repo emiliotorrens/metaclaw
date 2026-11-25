@@ -28,7 +28,8 @@ class ClawException(val status: Int, message: String) : IOException(message)
  * returns its answer as plain text for speech.
  *
  * Protocol: `POST {base}/ask` with `Authorization: Bearer <token>` and a JSON body
- * `{question, conversation_id, language, image_jpeg_b64?}`; the reply is `{answer}`.
+ * `{question, conversation_id, language, image_jpeg_b64?, location?}`, where `location` is
+ * `{lat, lon, accuracy_m, age_s}`; the reply is `{answer}`.
  */
 object Claw {
   private val JSON = "application/json; charset=utf-8".toMediaType()
@@ -57,12 +58,23 @@ object Claw {
       question: String,
       language: String,
       jpeg: ByteArray?,
+      where: Where? = null,
   ): String {
     val body =
         JSONObject()
             .put("question", question)
             .put("conversation_id", conversationId)
             .put("language", language)
+    if (where != null) {
+      body.put(
+          "location",
+          JSONObject()
+              .put("lat", where.lat)
+              .put("lon", where.lon)
+              .put("accuracy_m", where.accuracyM)
+              .put("age_s", where.ageS),
+      )
+    }
     if (jpeg != null) {
       val encoded = withContext(Dispatchers.Default) { Base64.encodeToString(jpeg, Base64.NO_WRAP) }
       body.put("image_jpeg_b64", encoded)

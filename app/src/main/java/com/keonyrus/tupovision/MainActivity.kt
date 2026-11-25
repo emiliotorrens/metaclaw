@@ -122,6 +122,11 @@ class MainActivity : ComponentActivity() {
   private fun requestAndroidPermissions() {
     val wanted = ArrayList<String>()
     wanted.addAll(Engine.REQUIRED_PERMISSIONS)
+    // Optional: only used for "near me" questions to your own agent.
+    if (Engine.state.value.clawMode && Engine.state.value.shareLocation) {
+      wanted.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+      wanted.add(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
       wanted.add(Manifest.permission.POST_NOTIFICATIONS)
     }
@@ -316,6 +321,15 @@ private fun ClawSection(state: UiState) {
         onChange = { Engine.setClawMode(it) },
     )
     if (state.clawMode) {
+      SettingSwitch(
+          title = "Send my location",
+          subtitle =
+              "Each question to your agent carries where the phone is, so \"what is near me\" " +
+                  "works. It only goes to your own bridge.",
+          checked = state.shareLocation,
+          enabled = !state.running,
+          onChange = { Engine.setShareLocation(it) },
+      )
       var url by remember(state.clawUrl) { mutableStateOf(state.clawUrl) }
       OutlinedTextField(
           value = url,

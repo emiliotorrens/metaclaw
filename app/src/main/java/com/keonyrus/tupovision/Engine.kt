@@ -96,6 +96,8 @@ data class UiState(
     val clawTokenSet: Boolean = false,
     /** MetaClaw: wait for the wake phrase with the on-phone Vosk model instead of speech recognition. */
     val offlineWake: Boolean = true,
+    /** Send where the phone is with each question to your agent. */
+    val shareLocation: Boolean = true,
     /** False when the APK was built without the wake-word model. */
     val offlineWakeAvailable: Boolean = false,
     val geminiKeySet: Boolean = false,
@@ -193,6 +195,7 @@ object Engine {
           clawUrl = prefs.getString("claw_url", "") ?: "",
           clawTokenSet = SecureStore.get(app, CLAW_TOKEN) != null,
           offlineWake = prefs.getBoolean("offline_wake", true),
+          shareLocation = prefs.getBoolean("share_location", true),
           offlineWakeAvailable = Hotword(app).available(),
           bargeIn = prefs.getBoolean("barge_in", true),
           triggerPackage =
@@ -393,6 +396,11 @@ object Engine {
   fun setClawMode(value: Boolean) {
     update { it.copy(clawMode = value) }
     prefs().edit().putBoolean("claw_mode", value).apply()
+  }
+
+  fun setShareLocation(value: Boolean) {
+    update { it.copy(shareLocation = value) }
+    prefs().edit().putBoolean("share_location", value).apply()
   }
 
   fun setOfflineWake(value: Boolean) {
@@ -1094,7 +1102,8 @@ object Engine {
           tts?.speak(fillerPhrase())
         }
     try {
-      val answer = Claw.ask(settings.clawUrl, token, question, speechLanguage(), jpeg)
+      val where = if (settings.shareLocation) PhoneLocation.current(app) else null
+      val answer = Claw.ask(settings.clawUrl, token, question, speechLanguage(), jpeg, where)
       filler.cancel()
       awaitSpeechEnd()
       val latency = SystemClock.elapsedRealtime() - startedAt

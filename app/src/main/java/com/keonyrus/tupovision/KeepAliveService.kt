@@ -76,12 +76,11 @@ class KeepAliveService : Service() {
   private fun serviceTypes(): Int {
     val micGranted =
         checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-    return if (micGranted) {
-      ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
-          ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-    } else {
-      ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-    }
+    var types = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+    if (micGranted) types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+    // MetaClaw: lets questions asked with the screen off still carry the phone's location.
+    if (PhoneLocation.granted(this)) types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+    return types
   }
 
   private fun buildNotification(): Notification {
