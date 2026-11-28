@@ -38,7 +38,7 @@ android {
         storeFile = file(signingKeystore)
         storeType = "pkcs12"
         storePassword = System.getenv("SIGNING_KEYSTORE_PASSWORD")
-        keyAlias = System.getenv("SIGNING_KEY_ALIAS") ?: "tupovision"
+        keyAlias = System.getenv("SIGNING_KEY_ALIAS") ?: "metaclaw"
         keyPassword = System.getenv("SIGNING_KEYSTORE_PASSWORD")
       }
     }
