@@ -739,7 +739,11 @@ private fun SettingsSection(state: UiState, onNotificationAccess: () -> Unit) {
     )
     SettingSwitch(
         title = "Photo instead of video frame",
-        subtitle = "ChatGPT mode only. Sharper for small text, but slower.",
+        subtitle =
+            if (state.clawMode)
+                "Takes a real photo instead of grabbing a video frame, and sends it with every " +
+                    "question, not only “what am I looking at”. Sharper for small text, ~1-2 s slower."
+            else "Sharper for small text, but slower.",
         checked = state.photoMode,
         enabled = !state.running,
         onChange = { Engine.setPhotoMode(it) },
