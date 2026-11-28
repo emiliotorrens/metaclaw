@@ -533,7 +533,7 @@ object Engine {
 
   /** Called when the standby gesture arrives from the glasses. */
   fun toggleFromGesture() {
-    if (_state.value.running && _state.value.resting) {
+    if (!_state.value.running && _state.value.resting) {
       log("Gesture: listening again")
       MediaWatch.beep(starting = true)
       resumeListening()
@@ -582,8 +582,8 @@ object Engine {
       fail("Grant the Bluetooth and microphone permissions first")
       return
     }
-    if (claw) Claw.newConversation()
-    update { it.copy(running = true, phase = Phase.CONNECTING, error = null) }
+    if (claw && !_state.value.resting) Claw.newConversation()
+    update { it.copy(running = true, resting = false, phase = Phase.CONNECTING, error = null) }
     scope.launch {
       var granted = false
       Wearables.checkPermissionStatus(Permission.CAMERA)
@@ -763,14 +763,13 @@ object Engine {
     history.clear()
     Frames.reset()
     // In standby the service stays up, waiting for the next gesture.
-    if (serviceStarted && !_state.value.standby) {
+    if (serviceStarted && !_state.value.standby && !_state.value.resting) {
       KeepAliveService.stop(app)
       serviceStarted = false
     }
     update {
       it.copy(
           running = false,
-          resting = false,
           phase = Phase.IDLE,
           partial = "",
           sessionState = "—",
@@ -789,7 +788,6 @@ object Engine {
       return
     }
     lastActivityAt = SystemClock.elapsedRealtime()
-    if (_state.value.resting) update { it.copy(resting = false) }
     if (_state.value.clawMode) watchIdle()
     scope.launch {
       val settings = _state.value
@@ -829,10 +827,14 @@ object Engine {
             val busy = turnJob?.isActive == true || tts?.isSpeaking == true
             if (busy) lastActivityAt = SystemClock.elapsedRealtime()
             if (!busy && SystemClock.elapsedRealtime() - lastActivityAt >= CLAW_IDLE_REST_MS) {
-              pauseVoice("Resting after ${CLAW_IDLE_REST_MS / 60000} min without questions: " +
-                  "the glasses microphone is free for Hey Meta. Tap Listen to continue.")
+              // The glasses keep "Hey Meta" off while any app holds a camera session, so resting
+              // closes the session too, not just the microphone.
+              log("Resting after ${CLAW_IDLE_REST_MS / 60000} min without questions: the glasses " +
+                  "are free for Hey Meta. Tap Listen to continue.")
               update { it.copy(resting = true) }
               MediaWatch.beep(starting = false)
+              idleJob = null
+              shutdown()
               return@launch
             }
           }
@@ -840,14 +842,21 @@ object Engine {
   }
 
   /** MetaClaw: back from resting, from the screen, the notification or a standby gesture. */
-  fun resumeListening() {
-    if (!_state.value.running || voiceActive) return
-    if (!sessionStarted || !streaming) {
-      log("Cannot listen yet: the glasses session is not streaming")
-      return
-    }
+  fun resumeListening(requestPermission: (suspend (Permission) -> PermissionStatus)? = null) {
+    if (_state.value.running) return
     log("Listening again")
-    startVoice()
+    start(requestPermission)
+  }
+
+  /** Leaves the resting state for good: no Listen button, no background service. */
+  fun endRest() {
+    if (!_state.value.resting) return
+    update { it.copy(resting = false) }
+    if (!_state.value.running && serviceStarted && !_state.value.standby) {
+      KeepAliveService.stop(app)
+      serviceStarted = false
+    }
+    log("Rest ended")
   }
 
   private fun pauseVoice(reason: String) {

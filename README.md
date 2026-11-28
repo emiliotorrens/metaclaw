@@ -4,12 +4,13 @@
 ask, and the answer comes back through the glasses speakers. Ask *"what am I looking at?"* and a
 picture from the glasses camera goes along with the question.
 
-MetaClaw listens for its own wake phrase, so it does not take over "Hey Meta". While a MetaClaw
-conversation is running, though, the app holds the glasses microphone as a Bluetooth call, and the
-glasses do not answer "Hey Meta" during a call. So after two minutes without a question MetaClaw
-rests: it lets go of the microphone and "Hey Meta" works again. Tap **Listen** in the app or in
-its notification (or use the standby gesture) to bring it back. A single tap on the temple also
-pauses MetaClaw and frees the microphone; a second tap resumes.
+MetaClaw listens for its own wake phrase, but while a MetaClaw conversation is running the glasses
+do not answer "Hey Meta": they keep it off while an app holds a camera session with them (pausing
+with a temple tap is not enough). So after two minutes without a question MetaClaw rests: it
+closes the session and "Hey Meta" works again. Tap **Listen** in the app or in its notification
+(or use the standby gesture) to bring it back; reconnecting takes a few seconds, and the
+conversation with your agent carries on. Listen from the notification needs camera access set to
+*Always allow* in Meta AI.
 
 <p align="center"><img src="docs/img/screen.png" width="320" alt="MetaClaw main screen"></p>
 

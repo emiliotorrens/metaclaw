@@ -388,10 +388,10 @@ private fun ConversationSection(state: UiState, onStart: () -> Unit) {
                       state.liveMode -> "a Gemini API key."
                       else -> "ChatGPT sign-in."
                     }
+            state.resting -> "Resting, so “Hey Meta” works. Tap Listen here or in the notification."
             !state.running -> if (state.clawMode && state.offlineWake) "Start, then say “Oye Claw”." else "Ready when you are."
             state.phase == Phase.LISTENING && state.clawMode && state.offlineWake ->
                 "Say “Oye Claw”, wait for the beep, then ask."
-            state.resting -> "Resting, so “Hey Meta” works. Tap Listen, or Listen in the notification."
             state.phase == Phase.PAUSED -> "Tap the temple to continue."
             else -> "One tap on the temple pauses, another resumes."
           },
@@ -399,9 +399,9 @@ private fun ConversationSection(state: UiState, onStart: () -> Unit) {
           color = Muted,
           textAlign = TextAlign.Center,
       )
-      if (state.running && state.resting) {
+      if (!state.running && state.resting) {
         Button(
-            onClick = { Engine.resumeListening() },
+            onClick = onStart,
             shape = RoundedCornerShape(50),
             modifier = Modifier.fillMaxWidth().height(56.dp),
         ) {
@@ -409,7 +409,13 @@ private fun ConversationSection(state: UiState, onStart: () -> Unit) {
         }
       }
       Button(
-          onClick = { if (state.running) Engine.stop() else onStart() },
+          onClick = {
+            when {
+              state.running -> Engine.stop()
+              state.resting -> Engine.endRest()
+              else -> onStart()
+            }
+          },
           enabled = state.running || ready,
           shape = RoundedCornerShape(50),
           colors =
@@ -419,7 +425,11 @@ private fun ConversationSection(state: UiState, onStart: () -> Unit) {
           modifier = Modifier.fillMaxWidth().height(56.dp),
       ) {
         Text(
-            if (state.running) "Stop" else "Start conversation",
+            when {
+              state.running -> "Stop"
+              state.resting -> "Stop resting"
+              else -> "Start conversation"
+            },
             style = MaterialTheme.typography.titleMedium,
         )
       }
