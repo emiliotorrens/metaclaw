@@ -7,6 +7,8 @@ picture from the glasses camera goes along with the question.
 "Hey Meta" keeps working and keeps going to Meta. MetaClaw listens for its own wake phrase, so
 both live side by side.
 
+<p align="center"><img src="docs/img/screen.png" width="320" alt="MetaClaw main screen"></p>
+
 MetaClaw is a fork of **[Tupo Vision](https://github.com/KeonyRus/tupo_vision)** by KeonyRus
 (MIT). Tupo Vision did the hard part: the glasses connection through Meta's official toolkit,
 camera frames, temple-tap control and the background service that keeps it all alive with the
@@ -14,8 +16,7 @@ phone in a pocket. MetaClaw adds a third brain next to its ChatGPT and Gemini mo
 own agent**, reached through a small bridge on your own machine. See [Credits and
 licenses](#credits-and-licenses).
 
-> **Status: early, untested on real glasses.** The app builds and the bridge is tested on its
-> own, but nobody has run this version on a pair of glasses yet. Expect rough edges. Not
+> **Status: early.** First runs on real glasses work; expect rough edges. Not
 > affiliated with Meta, OpenClaw, OpenAI or Google.
 
 ## How it works
@@ -108,8 +109,16 @@ scripts/get-wake-model.sh      # offline wake-phrase model, ~40 MB (optional)
 ```
 
 Install the APK, then in the app: grant the permissions, link the glasses through Meta AI, and
-under **2. Your agent** enter the bridge address (`http://100.x.y.z:8791`) and token, then tap
-**Test**. Start the conversation and say "hey Claw, …".
+under **Your agent** enter the bridge address and token, then tap **Test**. Start the
+conversation, say "hey Claw" or "oye Claw", wait for the beep and ask.
+
+The address has to be **https**: Android blocks plain http to anything but localhost. With
+Tailscale, put the bridge behind its certificate and use the `.ts.net` name:
+
+```bash
+tailscale serve --bg --https=8443 http://<tailscale-ip>:8791
+# address in the app: https://<machine>.<tailnet>.ts.net:8443
+```
 
 ## Credits and licenses
 

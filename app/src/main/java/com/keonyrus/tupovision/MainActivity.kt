@@ -13,6 +13,34 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions
 import androidx.compose.foundation.Image
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -64,8 +92,32 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-private val Accent = Color(0xFF19C37D)
+// MetaClaw palette: deep ink background, warm "claw" orange, mint for done.
+private val Ink = Color(0xFF0B0D12)
+private val Panel = Color(0xFF151922)
+private val PanelHigh = Color(0xFF1D2230)
+private val ClawOrange = Color(0xFFFF7A45)
+private val Mint = Color(0xFF3DDC97)
+private val Sky = Color(0xFF6AA8FF)
+private val Muted = Color(0xFF8A93A6)
+private val Accent = Mint
 private val Warning = Color(0xFFFFB454)
+
+internal fun previewColors() = MetaClawColors
+
+private val MetaClawColors =
+    darkColorScheme(
+        primary = ClawOrange,
+        onPrimary = Color(0xFF1A0E08),
+        secondary = Mint,
+        background = Ink,
+        surface = Panel,
+        surfaceVariant = PanelHigh,
+        surfaceContainer = Panel,
+        surfaceContainerHigh = PanelHigh,
+        onSurfaceVariant = Muted,
+        outline = Color(0xFF2E3546),
+    )
 
 class MainActivity : ComponentActivity() {
 
@@ -96,7 +148,7 @@ class MainActivity : ComponentActivity() {
     enableEdgeToEdge()
     setContent {
       val state by Engine.state.collectAsStateWithLifecycle()
-      MaterialTheme(colorScheme = darkColorScheme(primary = Accent, onPrimary = Color.Black)) {
+      MaterialTheme(colorScheme = MetaClawColors) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
           Screen(
               state = state,
@@ -153,7 +205,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun Screen(
+internal fun Screen(
     state: UiState,
     onGrantPermissions: () -> Unit,
     onInstallMetaAi: () -> Unit,
@@ -169,30 +221,135 @@ private fun Screen(
           Modifier.fillMaxSize()
               .safeDrawingPadding()
               .verticalScroll(rememberScrollState())
-              .padding(16.dp),
+              .padding(horizontal = 16.dp, vertical = 12.dp),
       verticalArrangement = Arrangement.spacedBy(12.dp),
   ) {
-    Text("MetaClaw", style = MaterialTheme.typography.headlineSmall)
+    Header(state)
 
     val error = state.error
     if (error != null) {
-      Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-          Text(error, color = Warning)
-          TextButton(onClick = { Engine.clearError() }) { Text("Dismiss") }
+      Card(
+          modifier = Modifier.fillMaxWidth(),
+          shape = RoundedCornerShape(20.dp),
+          colors = CardDefaults.cardColors(containerColor = Warning.copy(alpha = 0.12f)),
+      ) {
+        Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+          Text(error, color = Warning, modifier = Modifier.weight(1f))
+          TextButton(onClick = { Engine.clearError() }) { Text("OK") }
         }
       }
     }
 
     ConversationSection(state, onStart)
-    GlassesSection(state, onGrantPermissions, onInstallMetaAi, onRegister, onUnregister)
-    ClawSection(state)
+    val setupDone = state.permissionsGranted && state.metaInstalled && state.registered &&
+        (!state.clawMode || (state.clawUrl.isNotEmpty() && state.clawTokenSet))
+    GlassesSection(state, setupDone, onGrantPermissions, onInstallMetaAi, onRegister, onUnregister)
+    ClawSection(state, setupDone)
     if (!state.clawMode) {
       AssistantSection(state)
       if (!state.liveMode) ChatGptSection(state, onSignIn)
     }
     SettingsSection(state, onNotificationAccess)
     LogSection(state, onCopyLog)
+    Text(
+        "MetaClaw · based on Tupo Vision (MIT). Not a Meta product.",
+        style = MaterialTheme.typography.labelSmall,
+        color = Muted,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+    )
+  }
+}
+
+@Composable
+private fun Header(state: UiState) {
+  Row(
+      modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 4.dp),
+      verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Box(
+        modifier = Modifier.size(40.dp).clip(CircleShape).background(
+            Brush.linearGradient(listOf(ClawOrange, Color(0xFFFFB36B)))),
+        contentAlignment = Alignment.Center,
+    ) {
+      Text("🐾", fontSize = 20.sp)
+    }
+    Spacer(Modifier.width(12.dp))
+    Column(Modifier.weight(1f)) {
+      Text("MetaClaw", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+      Text(
+          if (state.clawMode) "Your agent, in your glasses" else "Tupo Vision assistants",
+          style = MaterialTheme.typography.bodySmall,
+          color = Muted,
+      )
+    }
+    Pill(
+        text = if (state.hasActiveDevice) "Glasses on" else if (state.registered) "Linked" else "Not linked",
+        color = if (state.hasActiveDevice) Mint else if (state.registered) Sky else Muted,
+    )
+  }
+}
+
+@Composable
+private fun Pill(text: String, color: Color) {
+  Row(
+      modifier = Modifier.clip(RoundedCornerShape(50)).background(color.copy(alpha = 0.14f))
+          .padding(horizontal = 10.dp, vertical = 5.dp),
+      verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Box(Modifier.size(7.dp).clip(CircleShape).background(color))
+    Spacer(Modifier.width(6.dp))
+    Text(text, color = color, style = MaterialTheme.typography.labelMedium)
+  }
+}
+
+private fun phaseColor(phase: Phase): Color =
+    when (phase) {
+      Phase.IDLE -> Muted
+      Phase.CONNECTING -> Sky
+      Phase.LISTENING -> Mint
+      Phase.THINKING -> ClawOrange
+      Phase.SPEAKING -> Color(0xFFB98CFF)
+      Phase.PAUSED -> Warning
+    }
+
+/** A soft glowing circle that breathes while the conversation is live. */
+@Composable
+private fun StatusOrb(phase: Phase, running: Boolean) {
+  val color by animateColorAsState(phaseColor(phase), label = "orb-color")
+  val pulse = rememberInfiniteTransition(label = "orb")
+  val speed = if (phase == Phase.THINKING) 700 else 1600
+  val scale by pulse.animateFloat(
+      initialValue = 0.86f,
+      targetValue = if (running && phase != Phase.PAUSED) 1.08f else 0.86f,
+      animationSpec = infiniteRepeatable(tween(speed, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+      label = "orb-scale",
+  )
+  Box(Modifier.size(132.dp), contentAlignment = Alignment.Center) {
+    Box(
+        Modifier.size(132.dp).scale(scale).clip(CircleShape)
+            .background(Brush.radialGradient(listOf(color.copy(alpha = 0.35f), Color.Transparent))))
+    Box(
+        Modifier.size(76.dp).clip(CircleShape)
+            .background(Brush.radialGradient(listOf(color, color.copy(alpha = 0.55f)))))
+  }
+}
+
+@Composable
+private fun Bubble(who: String, text: String, mine: Boolean) {
+  Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
+    Column(
+        modifier = Modifier.fillMaxWidth(0.86f)
+            .clip(RoundedCornerShape(
+                topStart = 18.dp, topEnd = 18.dp,
+                bottomStart = if (mine) 18.dp else 4.dp, bottomEnd = if (mine) 4.dp else 18.dp))
+            .background(if (mine) ClawOrange.copy(alpha = 0.16f) else PanelHigh)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+    ) {
+      Text(who, style = MaterialTheme.typography.labelSmall, color = if (mine) ClawOrange else Mint)
+      Text(text, style = MaterialTheme.typography.bodyMedium)
+    }
   }
 }
 
@@ -205,66 +362,110 @@ private fun ConversationSection(state: UiState, onStart: () -> Unit) {
         else -> state.signedIn
       }
   val ready = assistantReady && state.registered && state.permissionsGranted
-  Section("Conversation") {
-    Button(
-        onClick = { if (state.running) Engine.stop() else onStart() },
-        enabled = state.running || ready,
-        modifier = Modifier.fillMaxWidth().height(56.dp),
+  Card(
+      modifier = Modifier.fillMaxWidth().animateContentSize(),
+      shape = RoundedCornerShape(28.dp),
+      colors = CardDefaults.cardColors(containerColor = Panel),
+  ) {
+    Column(
+        Modifier.padding(20.dp).fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-      Text(if (state.running) "Stop" else "Start conversation")
-    }
-    if (!ready && !state.running) {
+      StatusOrb(state.phase, state.running)
       Text(
-          "Finish the steps below first: permissions, linking the glasses, and " +
+          if (state.running) state.phase.label else if (ready) "Ready" else "Not set up",
+          style = MaterialTheme.typography.headlineSmall,
+          fontWeight = FontWeight.SemiBold,
+          color = phaseColor(state.phase),
+      )
+      Text(
+          when {
+            !ready && !state.running ->
+                "Finish the setup below: permissions, linking the glasses and " +
+                    when {
+                      state.clawMode -> "the bridge."
+                      state.liveMode -> "a Gemini API key."
+                      else -> "ChatGPT sign-in."
+                    }
+            !state.running -> if (state.clawMode && state.offlineWake) "Start, then say “Oye Claw”." else "Ready when you are."
+            state.phase == Phase.LISTENING && state.clawMode && state.offlineWake ->
+                "Say “Oye Claw”, wait for the beep, then ask."
+            state.phase == Phase.PAUSED -> "Tap the temple to continue."
+            else -> "One tap on the temple pauses, another resumes."
+          },
+          style = MaterialTheme.typography.bodyMedium,
+          color = Muted,
+          textAlign = TextAlign.Center,
+      )
+      Button(
+          onClick = { if (state.running) Engine.stop() else onStart() },
+          enabled = state.running || ready,
+          shape = RoundedCornerShape(50),
+          colors =
+              if (state.running)
+                  ButtonDefaults.buttonColors(containerColor = PanelHigh, contentColor = Color.White)
+              else ButtonDefaults.buttonColors(),
+          modifier = Modifier.fillMaxWidth().height(56.dp),
+      ) {
+        Text(
+            if (state.running) "Stop" else "Start conversation",
+            style = MaterialTheme.typography.titleMedium,
+        )
+      }
+      val latency = state.latencyMs
+      if (latency != null) {
+        Text(
+            "First sound after %.1f s".format(latency / 1000.0),
+            style = MaterialTheme.typography.labelMedium,
+            color = Muted,
+        )
+      }
+    }
+    if (state.partial.isNotEmpty() || state.question.isNotEmpty() || state.answer.isNotEmpty()) {
+      Column(
+          Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+          verticalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        if (state.question.isNotEmpty()) Bubble("You", state.question, mine = true)
+        if (state.partial.isNotEmpty()) Bubble("Hearing…", state.partial, mine = true)
+        if (state.answer.isNotEmpty()) {
+          Bubble(
               when {
-                state.clawMode -> "the bridge address and token."
-                state.liveMode -> "a Gemini API key."
-                else -> "ChatGPT sign-in."
+                state.clawMode -> "Claw"
+                state.liveMode -> "Gemini"
+                else -> "GPT"
               },
-          style = MaterialTheme.typography.bodySmall,
-      )
-    }
-    Text(state.phase.label, style = MaterialTheme.typography.titleMedium, color = Accent)
-    if (state.partial.isNotEmpty()) Text("… ${state.partial}")
-    if (state.question.isNotEmpty()) Text("You: ${state.question}")
-    if (state.answer.isNotEmpty()) {
-      Text(
-          (when {
-            state.clawMode -> "Claw: "
-            state.liveMode -> "Gemini: "
-            else -> "GPT: "
-          }) + state.answer)
-    }
-    val latency = state.latencyMs
-    if (latency != null) {
-      Text(
-          "Time to first sound: %.1f s".format(latency / 1000.0),
-          style = MaterialTheme.typography.bodySmall,
-      )
+              state.answer,
+              mine = false,
+          )
+        }
+      }
     }
     val frame = state.frame
     if (frame != null) {
-      Text(
-          if (state.liveMode && !state.clawMode) "What the model sees now:"
-          else "Frame sent with the question:",
-          style = MaterialTheme.typography.bodySmall,
-      )
-      Image(
-          bitmap = frame.asImageBitmap(),
-          contentDescription = "Frame from the glasses camera",
-          modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp),
-          contentScale = ContentScale.Fit,
-      )
+      Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+        Text(
+            if (state.liveMode && !state.clawMode) "What the model sees now" else "Sent with the question",
+            style = MaterialTheme.typography.labelSmall,
+            color = Muted,
+        )
+        Spacer(Modifier.height(6.dp))
+        Image(
+            bitmap = frame.asImageBitmap(),
+            contentDescription = "Frame from the glasses camera",
+            modifier = Modifier.fillMaxWidth().heightIn(max = 260.dp).clip(RoundedCornerShape(18.dp)),
+            contentScale = ContentScale.Crop,
+        )
+      }
     }
     if (state.running) {
       Text(
-          "Session: ${state.sessionState} · stream: ${state.streamState} · " +
-              "frame: ${state.frameInfo}",
-          style = MaterialTheme.typography.bodySmall,
-      )
-      Text(
-          "One tap on the temple of the glasses pauses, a second tap resumes.",
-          style = MaterialTheme.typography.bodySmall,
+          "session ${state.sessionState} · stream ${state.streamState} · ${state.frameInfo}",
+          style = MaterialTheme.typography.labelSmall,
+          color = Muted.copy(alpha = 0.7f),
+          textAlign = TextAlign.Center,
+          modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
       )
     }
   }
@@ -273,12 +474,13 @@ private fun ConversationSection(state: UiState, onStart: () -> Unit) {
 @Composable
 private fun GlassesSection(
     state: UiState,
+    setupDone: Boolean,
     onGrantPermissions: () -> Unit,
     onInstallMetaAi: () -> Unit,
     onRegister: () -> Unit,
     onUnregister: () -> Unit,
 ) {
-  Section("1. Glasses") {
+  Section("Glasses", summary = if (state.registered) "Linked" else "Set up", done = state.registered && state.permissionsGranted, startOpen = !setupDone) {
     StatusLine(state.permissionsGranted, "Permissions: Bluetooth and microphone")
     if (!state.permissionsGranted) {
       OutlinedButton(onClick = onGrantPermissions) { Text("Grant permissions") }
@@ -294,6 +496,7 @@ private fun GlassesSection(
             "not installed. If Meta AI says “Error while opening link”, Developer Mode is " +
             "off: switch it off and on again, restart Meta AI and link once more.",
         style = MaterialTheme.typography.bodySmall,
+        color = Muted,
     )
     StatusLine(state.registered, "App linked to the glasses (${state.registration})")
     if (state.registered) {
@@ -309,8 +512,8 @@ private fun GlassesSection(
 
 /** MetaClaw: where your own agent lives. New section, not in upstream Tupo Vision. */
 @Composable
-private fun ClawSection(state: UiState) {
-  Section("2. Your agent (MetaClaw bridge)") {
+private fun ClawSection(state: UiState, setupDone: Boolean) {
+  Section("Your agent", summary = if (state.clawMode) "MetaClaw bridge" else "Off", done = !state.clawMode || (state.clawUrl.isNotEmpty() && state.clawTokenSet), startOpen = !setupDone) {
     SettingSwitch(
         title = "Answer with my agent",
         subtitle =
@@ -334,7 +537,7 @@ private fun ClawSection(state: UiState) {
       OutlinedTextField(
           value = url,
           onValueChange = { url = it },
-          label = { Text("Bridge address, e.g. http://100.x.y.z:8791") },
+          label = { Text("Bridge address (https), e.g. https://my-pc.tailnet.ts.net:8443") },
           singleLine = true,
           enabled = !state.running,
           modifier = Modifier.fillMaxWidth(),
@@ -381,6 +584,7 @@ private fun ClawSection(state: UiState) {
           "Keep the bridge on a private network such as Tailscale. The token is stored " +
               "encrypted on this phone and only sent to the bridge.",
           style = MaterialTheme.typography.bodySmall,
+          color = Muted,
       )
     }
   }
@@ -388,7 +592,7 @@ private fun ClawSection(state: UiState) {
 
 @Composable
 private fun AssistantSection(state: UiState) {
-  Section("2. Assistant") {
+  Section("Assistant", summary = if (state.liveMode) "Gemini Live" else "ChatGPT") {
     SettingSwitch(
         title = "Live voice (Gemini Live)",
         subtitle =
@@ -426,6 +630,7 @@ private fun AssistantSection(state: UiState) {
         Text(
             "The key is stored encrypted on this phone only and is sent only to Google.",
             style = MaterialTheme.typography.bodySmall,
+            color = Muted,
         )
       }
     }
@@ -434,7 +639,7 @@ private fun AssistantSection(state: UiState) {
 
 @Composable
 private fun ChatGptSection(state: UiState, onSignIn: () -> Unit) {
-  Section("ChatGPT") {
+  Section("ChatGPT", summary = if (state.signedIn) state.model else "Sign in", done = state.signedIn) {
     StatusLine(state.signedIn, "ChatGPT plan connected")
     if (state.signedIn) {
       var expanded by remember { mutableStateOf(false) }
@@ -455,6 +660,7 @@ private fun ChatGptSection(state: UiState, onSignIn: () -> Unit) {
       Text(
           "Requests count against your plan limits. Usage per app: chatgpt.com/settings/usage",
           style = MaterialTheme.typography.bodySmall,
+          color = Muted,
       )
       TextButton(onClick = { Engine.signOut() }) { Text("Sign out") }
     } else {
@@ -463,11 +669,13 @@ private fun ChatGptSection(state: UiState, onSignIn: () -> Unit) {
         Text(
             "Waiting for the sign-in in the browser. If the tab was closed, tap the button again.",
             style = MaterialTheme.typography.bodySmall,
+            color = Muted,
         )
       }
       Text(
           "Needs a Go, Plus or Pro plan. On the sign-in screen, allow the app to use your plan.",
           style = MaterialTheme.typography.bodySmall,
+          color = Muted,
       )
     }
   }
@@ -475,10 +683,11 @@ private fun ChatGptSection(state: UiState, onSignIn: () -> Unit) {
 
 @Composable
 private fun SettingsSection(state: UiState, onNotificationAccess: () -> Unit) {
-  Section("Settings") {
+  Section("Settings", summary = "Voice, wake phrase, standby") {
     Text(
         "Change these while the conversation is stopped; they apply from the next start.",
         style = MaterialTheme.typography.bodySmall,
+        color = Muted,
     )
     SettingSwitch(
         title = "Standby (experimental)",
@@ -500,6 +709,7 @@ private fun SettingsSection(state: UiState, onNotificationAccess: () -> Unit) {
               "reads no notifications. If the switch there is greyed out, open " +
               "Android Settings → Apps → MetaClaw → ⋮ → Allow restricted settings first.",
           style = MaterialTheme.typography.bodySmall,
+          color = Muted,
       )
     }
     OutlinedTextField(
@@ -580,10 +790,11 @@ private fun SettingsSection(state: UiState, onNotificationAccess: () -> Unit) {
 
 @Composable
 private fun LogSection(state: UiState, onCopyLog: () -> Unit) {
-  Section("Log") {
+  Section("Log", summary = state.log.lastOrNull()?.substringAfter("  ")?.take(40) ?: "Empty") {
     TextButton(onClick = onCopyLog) { Text("Copy log") }
     Text(
         state.log.takeLast(60).joinToString("\n"),
+        color = Muted,
         fontFamily = FontFamily.Monospace,
         fontSize = 11.sp,
         lineHeight = 15.sp,
@@ -592,21 +803,61 @@ private fun LogSection(state: UiState, onCopyLog: () -> Unit) {
 }
 
 @Composable
-private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
-  Card(modifier = Modifier.fillMaxWidth()) {
-    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-      Text(title, style = MaterialTheme.typography.titleMedium)
-      content()
+private fun Section(
+    title: String,
+    summary: String = "",
+    done: Boolean? = null,
+    startOpen: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+  var open by rememberSaveable(title) { mutableStateOf(startOpen) }
+  val turn by animateFloatAsState(if (open) 180f else 0f, label = "chevron")
+  Card(
+      modifier = Modifier.fillMaxWidth().animateContentSize(),
+      shape = RoundedCornerShape(22.dp),
+      colors = CardDefaults.cardColors(containerColor = Panel),
+  ) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable { open = !open }
+            .padding(horizontal = 18.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+      if (done != null) {
+        Box(
+            Modifier.size(22.dp).clip(CircleShape)
+                .background(if (done) Mint.copy(alpha = 0.18f) else PanelHigh),
+            contentAlignment = Alignment.Center,
+        ) {
+          Text(if (done) "✓" else "•", color = if (done) Mint else Muted, fontSize = 12.sp)
+        }
+        Spacer(Modifier.width(12.dp))
+      }
+      Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+      if (summary.isNotEmpty() && !open) {
+        Text(summary, style = MaterialTheme.typography.bodySmall, color = Muted, maxLines = 1,
+            modifier = Modifier.padding(horizontal = 8.dp).widthIn(max = 180.dp))
+      }
+      Text("⌄", color = Muted, fontSize = 18.sp, modifier = Modifier.rotate(turn))
+    }
+    if (open) {
+      HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+      Column(
+          Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+          verticalArrangement = Arrangement.spacedBy(10.dp),
+      ) {
+        content()
+      }
     }
   }
 }
 
 @Composable
 private fun StatusLine(ok: Boolean, text: String) {
-  Text(
-      (if (ok) "✓ " else "○ ") + text,
-      color = if (ok) Accent else MaterialTheme.colorScheme.onSurfaceVariant,
-  )
+  Row(verticalAlignment = Alignment.CenterVertically) {
+    Box(Modifier.size(8.dp).clip(CircleShape).background(if (ok) Mint else Muted.copy(alpha = 0.6f)))
+    Spacer(Modifier.width(10.dp))
+    Text(text, color = if (ok) Color.White else Muted, style = MaterialTheme.typography.bodyMedium)
+  }
 }
 
 @Composable
@@ -617,11 +868,19 @@ private fun SettingSwitch(
     enabled: Boolean,
     onChange: (Boolean) -> Unit,
 ) {
-  Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+  Row(
+      modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+      verticalAlignment = Alignment.CenterVertically,
+  ) {
     Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-      Text(title)
-      Text(subtitle, style = MaterialTheme.typography.bodySmall)
+      Text(title, style = MaterialTheme.typography.bodyLarge)
+      Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Muted)
     }
-    Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
+    Switch(
+        checked = checked,
+        onCheckedChange = onChange,
+        enabled = enabled,
+        colors = SwitchDefaults.colors(checkedTrackColor = ClawOrange, checkedThumbColor = Color.White),
+    )
   }
 }
