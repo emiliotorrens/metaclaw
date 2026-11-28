@@ -391,6 +391,7 @@ private fun ConversationSection(state: UiState, onStart: () -> Unit) {
             !state.running -> if (state.clawMode && state.offlineWake) "Start, then say “Oye Claw”." else "Ready when you are."
             state.phase == Phase.LISTENING && state.clawMode && state.offlineWake ->
                 "Say “Oye Claw”, wait for the beep, then ask."
+            state.resting -> "Resting, so “Hey Meta” works. Tap Listen, or Listen in the notification."
             state.phase == Phase.PAUSED -> "Tap the temple to continue."
             else -> "One tap on the temple pauses, another resumes."
           },
@@ -398,6 +399,15 @@ private fun ConversationSection(state: UiState, onStart: () -> Unit) {
           color = Muted,
           textAlign = TextAlign.Center,
       )
+      if (state.running && state.resting) {
+        Button(
+            onClick = { Engine.resumeListening() },
+            shape = RoundedCornerShape(50),
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+        ) {
+          Text("Listen", style = MaterialTheme.typography.titleMedium)
+        }
+      }
       Button(
           onClick = { if (state.running) Engine.stop() else onStart() },
           enabled = state.running || ready,

@@ -25,6 +25,7 @@ class KeepAliveService : Service() {
     private const val CHANNEL_ID = "conversation"
     private const val NOTIFICATION_ID = 1001
     private const val ACTION_STOP = "com.keonyrus.tupovision.STOP"
+    private const val ACTION_LISTEN = "com.keonyrus.tupovision.LISTEN"
     private const val WAKELOCK_TAG = "TupoVision::Conversation"
     // Backstop for a leaked lock; the normal release is in releaseWakeLock().
     private const val WAKELOCK_TIMEOUT_MS = 3L * 60L * 60L * 1000L
@@ -55,6 +56,10 @@ class KeepAliveService : Service() {
     } catch (e: Exception) {
       Log.e(TAG, "Could not enter the foreground", e)
       stopSelf()
+      return START_NOT_STICKY
+    }
+    if (intent?.action == ACTION_LISTEN) {
+      Engine.resumeListening()
       return START_NOT_STICKY
     }
     if (intent?.action == ACTION_STOP) {
@@ -98,9 +103,17 @@ class KeepAliveService : Service() {
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
+    val listen =
+        PendingIntent.getService(
+            this,
+            1,
+            Intent(this, KeepAliveService::class.java).setAction(ACTION_LISTEN),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
     return Notification.Builder(this, CHANNEL_ID)
-        .setContentTitle("Tupo Vision is running")
-        .setContentText("In a conversation, or on standby for a gesture")
+        .setContentTitle("MetaClaw is running")
+        .setContentText("Rests after 2 min without questions so Hey Meta works. Listen brings it back.")
+        .addAction(Notification.Action.Builder(null, "Listen", listen).build())
         .setSmallIcon(R.drawable.ic_stat)
         .setOngoing(true)
         .setContentIntent(open)

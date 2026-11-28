@@ -6,7 +6,10 @@ picture from the glasses camera goes along with the question.
 
 MetaClaw listens for its own wake phrase, so it does not take over "Hey Meta". While a MetaClaw
 conversation is running, though, the app holds the glasses microphone as a Bluetooth call, and the
-glasses do not answer "Hey Meta" during a call. Stop MetaClaw and "Hey Meta" works again.
+glasses do not answer "Hey Meta" during a call. So after two minutes without a question MetaClaw
+rests: it lets go of the microphone and "Hey Meta" works again. Tap **Listen** in the app or in
+its notification (or use the standby gesture) to bring it back. A single tap on the temple also
+pauses MetaClaw and frees the microphone; a second tap resumes.
 
 <p align="center"><img src="docs/img/screen.png" width="320" alt="MetaClaw main screen"></p>
 

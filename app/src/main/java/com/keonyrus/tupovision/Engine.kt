@@ -106,6 +106,8 @@ data class UiState(
     val bargeIn: Boolean = true,
     /** A gesture on the glasses starts and stops the conversation. Not kept across restarts. */
     val standby: Boolean = false,
+    /** MetaClaw: voice released after a while without questions, so "Hey Meta" works again. */
+    val resting: Boolean = false,
     val standbyAudio: String = "",
     /** Whether the user has granted the access needed to watch other apps' media sessions. */
     val mediaAccess: Boolean = false,
@@ -131,6 +133,9 @@ object Engine {
   private const val DEFAULT_WAKE = "hey claw, oye claw"
   // If the agent has not answered by then, say a short filler so silence is not mistaken for a hang.
   private const val CLAW_FILLER_MS = 2500L
+  // MetaClaw: after this long without a question the glasses microphone is released. While the
+  // app holds it as a Bluetooth call, the glasses do not answer "Hey Meta".
+  private const val CLAW_IDLE_REST_MS = 2L * 60L * 1000L
   // Long answers (web searches) keep a short "still working" cue going so the wait never feels hung.
   private const val CLAW_KEEPALIVE_FIRST_MS = 8000L
   private const val CLAW_KEEPALIVE_EVERY_MS = 6500L
@@ -164,6 +169,8 @@ object Engine {
   private var tts: Tts? = null
   private var voiceActive = false
   private var turnJob: Job? = null
+  private var idleJob: Job? = null
+  private var lastActivityAt = 0L
   private var errorStreak = 0
   // Offline wake phrase: the listener, and whether the current utterance follows a wake phrase.
   private var hotword: Hotword? = null
@@ -526,6 +533,12 @@ object Engine {
 
   /** Called when the standby gesture arrives from the glasses. */
   fun toggleFromGesture() {
+    if (_state.value.running && _state.value.resting) {
+      log("Gesture: listening again")
+      MediaWatch.beep(starting = true)
+      resumeListening()
+      return
+    }
     if (_state.value.running) {
       log("Gesture: stopping")
       MediaWatch.beep(starting = false)
@@ -721,6 +734,8 @@ object Engine {
 
   private fun shutdown() {
     voiceActive = false
+    idleJob?.cancel()
+    idleJob = null
     turnJob?.cancel()
     turnJob = null
     wakeJob?.cancel()
@@ -755,6 +770,7 @@ object Engine {
     update {
       it.copy(
           running = false,
+          resting = false,
           phase = Phase.IDLE,
           partial = "",
           sessionState = "—",
@@ -772,6 +788,9 @@ object Engine {
       startLive()
       return
     }
+    lastActivityAt = SystemClock.elapsedRealtime()
+    if (_state.value.resting) update { it.copy(resting = false) }
+    if (_state.value.clawMode) watchIdle()
     scope.launch {
       val settings = _state.value
       val routed = settings.glassesMic && AudioRouter.enable(app)
@@ -801,9 +820,41 @@ object Engine {
     }
   }
 
+  private fun watchIdle() {
+    idleJob?.cancel()
+    idleJob =
+        scope.launch {
+          while (voiceActive) {
+            delay(5000)
+            val busy = turnJob?.isActive == true || tts?.isSpeaking == true
+            if (busy) lastActivityAt = SystemClock.elapsedRealtime()
+            if (!busy && SystemClock.elapsedRealtime() - lastActivityAt >= CLAW_IDLE_REST_MS) {
+              pauseVoice("Resting after ${CLAW_IDLE_REST_MS / 60000} min without questions: " +
+                  "the glasses microphone is free for Hey Meta. Tap Listen to continue.")
+              update { it.copy(resting = true) }
+              MediaWatch.beep(starting = false)
+              return@launch
+            }
+          }
+        }
+  }
+
+  /** MetaClaw: back from resting, from the screen, the notification or a standby gesture. */
+  fun resumeListening() {
+    if (!_state.value.running || voiceActive) return
+    if (!sessionStarted || !streaming) {
+      log("Cannot listen yet: the glasses session is not streaming")
+      return
+    }
+    log("Listening again")
+    startVoice()
+  }
+
   private fun pauseVoice(reason: String) {
     if (!voiceActive) return
     voiceActive = false
+    idleJob?.cancel()
+    idleJob = null
     turnJob?.cancel()
     turnJob = null
     wakeJob?.cancel()
@@ -966,6 +1017,7 @@ object Engine {
         return
       }
     }
+    lastActivityAt = SystemClock.elapsedRealtime()
     turnJob = scope.launch { runTurn(question) }
   }
 
