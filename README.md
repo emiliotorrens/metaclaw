@@ -4,8 +4,9 @@
 ask, and the answer comes back through the glasses speakers. Ask *"what am I looking at?"* and a
 picture from the glasses camera goes along with the question.
 
-"Hey Meta" keeps working and keeps going to Meta. MetaClaw listens for its own wake phrase, so
-both live side by side.
+MetaClaw listens for its own wake phrase, so it does not take over "Hey Meta". While a MetaClaw
+conversation is running, though, the app holds the glasses microphone as a Bluetooth call, and the
+glasses do not answer "Hey Meta" during a call. Stop MetaClaw and "Hey Meta" works again.
 
 <p align="center"><img src="docs/img/screen.png" width="320" alt="MetaClaw main screen"></p>
 
