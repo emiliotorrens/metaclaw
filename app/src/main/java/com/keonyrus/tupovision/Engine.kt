@@ -96,6 +96,8 @@ data class UiState(
     val clawTokenSet: Boolean = false,
     /** MetaClaw: wait for the wake phrase with the on-phone Vosk model instead of speech recognition. */
     val offlineWake: Boolean = true,
+    /** Prefer a male text-to-speech voice, like the agentring phone line. */
+    val maleVoice: Boolean = true,
     /** Send where the phone is with each question to your agent. */
     val shareLocation: Boolean = true,
     /** False when the APK was built without the wake-word model. */
@@ -195,6 +197,7 @@ object Engine {
           clawUrl = prefs.getString("claw_url", "") ?: "",
           clawTokenSet = SecureStore.get(app, CLAW_TOKEN) != null,
           offlineWake = prefs.getBoolean("offline_wake", true),
+          maleVoice = prefs.getBoolean("male_voice", true),
           shareLocation = prefs.getBoolean("share_location", true),
           offlineWakeAvailable = Hotword(app).available(),
           bargeIn = prefs.getBoolean("barge_in", true),
@@ -401,6 +404,11 @@ object Engine {
   fun setShareLocation(value: Boolean) {
     update { it.copy(shareLocation = value) }
     prefs().edit().putBoolean("share_location", value).apply()
+  }
+
+  fun setMaleVoice(value: Boolean) {
+    update { it.copy(maleVoice = value) }
+    prefs().edit().putBoolean("male_voice", value).apply()
   }
 
   fun setOfflineWake(value: Boolean) {
@@ -773,6 +781,11 @@ object Engine {
       withTimeoutOrNull(3000) { while (!speech.ready) delay(50) }
       if (!speech.configure(speechLanguage(), routed)) {
         log("The phone has no text-to-speech voice for ${speechLanguage()}")
+      }
+      if (settings.maleVoice) {
+        val chosen = speech.preferMaleVoice(speechLanguage())
+        if (chosen != null) log("Voice: $chosen")
+        else log("No male voice found. Available: ${speech.voiceNames(speechLanguage()).joinToString()}")
       }
 
       val recognizer = stt ?: Stt(app, sttCallbacks).also { stt = it }

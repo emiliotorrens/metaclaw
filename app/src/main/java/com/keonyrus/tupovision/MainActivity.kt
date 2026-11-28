@@ -557,6 +557,13 @@ private fun SettingsSection(state: UiState, onNotificationAccess: () -> Unit) {
           enabled = !state.running && state.offlineWakeAvailable,
           onChange = { Engine.setOfflineWake(it) },
       )
+      SettingSwitch(
+          title = "Male voice",
+          subtitle = "Uses a male voice of the phone's text-to-speech when it has one. The choice shows in the log.",
+          checked = state.maleVoice,
+          enabled = !state.running,
+          onChange = { Engine.setMaleVoice(it) },
+      )
     }
     OutlinedTextField(
         value = state.wakeWord,

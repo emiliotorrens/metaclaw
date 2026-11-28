@@ -139,6 +139,45 @@ class Tts(context: Context, private val onReady: (Boolean) -> Unit) {
     return result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED
   }
 
+  /**
+   * Picks a male voice for the current language when the engine has one, so the glasses sound like
+   * the agentring phone line. Android has no gender field: Google's voices are known by name, and
+   * other engines usually say "male" in it. Returns the voice in use, or null if none was chosen.
+   */
+  fun preferMaleVoice(languageTag: String): String? {
+    val wanted = Locale.forLanguageTag(languageTag)
+    val candidates =
+        runCatching { engine.voices }.getOrNull().orEmpty().filter {
+          it.locale.language == wanted.language &&
+              (wanted.country.isEmpty() || it.locale.country == wanted.country)
+        }
+    fun male(name: String): Boolean {
+      val n = name.lowercase()
+      return MALE_GOOGLE.any { n.startsWith(it) } || (n.contains("male") && !n.contains("female"))
+    }
+    val pick =
+        candidates.filter { male(it.name) }.sortedBy { it.isNetworkConnectionRequired }.firstOrNull()
+            ?: return null
+    engine.voice = pick
+    return pick.name
+  }
+
+  /** Every voice name for the language, for the log. */
+  fun voiceNames(languageTag: String): List<String> {
+    val lang = Locale.forLanguageTag(languageTag).language
+    return runCatching { engine.voices }.getOrNull().orEmpty()
+        .filter { it.locale.language == lang }.map { it.name }.sorted()
+  }
+
+  private companion object {
+    /** Google speech services' male voices (Spain, US Spanish, US/UK English). */
+    val MALE_GOOGLE =
+        listOf(
+            "es-es-x-eed", "es-es-x-eef", "es-us-x-esd", "es-us-x-esf",
+            "en-us-x-iol", "en-us-x-iom", "en-us-x-tpd", "en-gb-x-gbb", "en-gb-x-gbd", "en-gb-x-rjs",
+        )
+  }
+
   fun speak(text: String) {
     counter += 1
     engine.speak(text, TextToSpeech.QUEUE_ADD, null, "utterance-$counter")
