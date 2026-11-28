@@ -130,7 +130,10 @@ object Engine {
   private const val CLAW_TOKEN = "claw_bridge_token"
   private const val DEFAULT_WAKE = "hey claw, oye claw"
   // If the agent has not answered by then, say a short filler so silence is not mistaken for a hang.
-  private const val CLAW_FILLER_MS = 4000L
+  private const val CLAW_FILLER_MS = 2500L
+  // Long answers (web searches) keep a short "still working" cue going so the wait never feels hung.
+  private const val CLAW_KEEPALIVE_FIRST_MS = 8000L
+  private const val CLAW_KEEPALIVE_EVERY_MS = 6500L
   // Lighter than the per-question frame: one of these goes up every second.
   private const val LIVE_JPEG_QUALITY = 65
 
@@ -1115,6 +1118,12 @@ object Engine {
         scope.launch {
           delay(CLAW_FILLER_MS)
           tts?.speak(fillerPhrase())
+          delay(CLAW_KEEPALIVE_FIRST_MS - CLAW_FILLER_MS)
+          var n = 0
+          while (true) {
+            tts?.speak(keepAlivePhrase(n++))
+            delay(CLAW_KEEPALIVE_EVERY_MS)
+          }
         }
     try {
       val where = if (settings.shareLocation) PhoneLocation.current(app) else null
@@ -1158,6 +1167,14 @@ object Engine {
 
   private fun fillerPhrase(): String =
       if (speechLanguage().startsWith("es", ignoreCase = true)) "Un momento." else "One moment."
+
+  private fun keepAlivePhrase(n: Int): String {
+    val phrases =
+        if (speechLanguage().startsWith("es", ignoreCase = true))
+            listOf("Sigo buscando.", "Ya casi.", "Sigo con ello.")
+        else listOf("Still working on it.", "Almost there.", "Still on it.")
+    return phrases[n % phrases.size]
+  }
 
   /** Spoken in the recognition language; the text-to-speech voice cannot read another one. */
   private fun spokenError(limit: Boolean): String {
