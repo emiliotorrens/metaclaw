@@ -52,7 +52,7 @@ class Hotword(private val context: Context) {
    * then frees the microphone and returns what was heard. Cancel the coroutine to stop listening.
    */
   @SuppressLint("MissingPermission") // RECORD_AUDIO is granted before the conversation starts
-  suspend fun await(device: AudioDeviceInfo?): String {
+  suspend fun await(device: AudioDeviceInfo?, onHeard: (String) -> Unit = {}): String {
     val model = load()
     return withContext(Dispatchers.IO) {
       val minBuffer =
@@ -86,6 +86,8 @@ class Hotword(private val context: Context) {
             val heard = words.joinToString(" ") { it.word }
             // Words only, never audio, so a missed wake phrase can be diagnosed from logcat.
             if (heard.isNotBlank() && heard != last) Log.d(TAG, "heard: $heard")
+            // Settled words also go to the app log, so a missed wake phrase can be tuned without adb.
+            if (settled && heard.isNotBlank()) onHeard(words.joinToString(" ") { w -> w.confidence?.let { "${w.word}(${"%.2f".format(it)})" } ?: w.word })
             last = heard
             if (WakeRule.called(words, settled)) return@withContext heard
           }

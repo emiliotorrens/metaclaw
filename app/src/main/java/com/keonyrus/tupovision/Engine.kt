@@ -828,11 +828,13 @@ object Engine {
     if (wakeJob?.isActive == true) return
     update { it.copy(phase = Phase.LISTENING, partial = "") }
     val listener = hotword ?: Hotword(app).also { hotword = it }
+    val input = AudioRouter.inputDevice(app)
+    log("Waiting for the wake phrase on the ${if (input != null) "glasses" else "phone"} microphone")
     wakeJob =
         scope.launch {
           val heard =
               try {
-                listener.await(AudioRouter.inputDevice(app))
+                listener.await(input) { log("Wake model heard: $it") }
               } catch (e: CancellationException) {
                 throw e
               } catch (e: Exception) {
